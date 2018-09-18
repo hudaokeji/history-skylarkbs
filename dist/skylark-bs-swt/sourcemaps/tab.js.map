@@ -1,0 +1,1 @@
+{"version":3,"sources":["tab.js"],"names":["define","tab","sbswt","Tab","Constructor"],"mappings":";;;;;;;AAAAA,QACE,yBACA,WACA,SAASC,EAAIC,GAIb,MAFAA,GAAMC,IAAMF,EAAIG,YAETH","file":"../tab.js","sourcesContent":["define([\n  \"skylark-bootstrap3/tab\",\n  \"./sbswt\"\n],function(tab,sbswt){\n\n  sbswt.Tab = tab.Constructor;\n\n  return tab;\n});\n"]}

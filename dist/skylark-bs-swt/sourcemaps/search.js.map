@@ -1,0 +1,1 @@
+{"version":3,"sources":["search.js"],"names":["define","search","sbswt","Search","Constructor"],"mappings":";;;;;;;AAAAA,QACE,wBACA,WACA,SAASC,EAAOC,GAGf,MAFAA,GAAMC,OAASF,EAAOG,YAEfH","file":"../search.js","sourcesContent":["define([\n  \"skylark-fuelux/search\",\n  \"./sbswt\"\n],function(search,sbswt){\n   sbswt.Search = search.Constructor;\n\n   return search;\n});\n"]}

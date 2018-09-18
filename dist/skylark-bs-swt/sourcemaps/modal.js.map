@@ -1,0 +1,1 @@
+{"version":3,"sources":["modal.js"],"names":["define","modal","sbswt","Modal","Constructor"],"mappings":";;;;;;;AAAAA,QACE,2BACA,WACA,SAASC,EAAMC,GAIf,MAFAA,GAAMC,MAAQF,EAAMG,YAEbH","file":"../modal.js","sourcesContent":["define([\n  \"skylark-bootstrap3/modal\",\n  \"./sbswt\"\n],function(modal,sbswt){\n\n  sbswt.Modal = modal.Constructor;\n\n  return modal;\n});\n"]}

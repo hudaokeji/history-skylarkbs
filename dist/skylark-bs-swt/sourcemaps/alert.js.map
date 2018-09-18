@@ -1,0 +1,1 @@
+{"version":3,"sources":["alert.js"],"names":["define","alert","sbswt","Alert","Constructor"],"mappings":";;;;;;;AAAAA,QACE,2BACA,WACA,SAASC,EAAMC,GAIf,MAFAA,GAAMC,MAAQF,EAAMG,YAEbH","file":"../alert.js","sourcesContent":["define([\n  \"skylark-bootstrap3/alert\",\n  \"./sbswt\"\n],function(alert,sbswt){\n\n  sbswt.Alert = alert.Constructor;\n\n  return alert;\n});\n"]}

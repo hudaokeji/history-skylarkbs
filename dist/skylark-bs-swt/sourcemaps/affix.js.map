@@ -1,0 +1,1 @@
+{"version":3,"sources":["affix.js"],"names":["define","affix","sbswt","Affix","Constructor"],"mappings":";;;;;;;AAAAA,QACE,2BACA,WACA,SAASC,EAAMC,GAIf,MAFAA,GAAMC,MAAQA,MAAMC,YAEbH","file":"../affix.js","sourcesContent":["define([\n  \"skylark-bootstrap3/affix\",\n  \"./sbswt\"\n],function(affix,sbswt){\n\n  sbswt.Affix = Affix.Constructor;\n\n  return affix;\n});\n"]}

@@ -1,0 +1,1 @@
+{"version":3,"sources":["loader.js"],"names":["define","loader","sbswt","Loader","Constructor"],"mappings":";;;;;;;AAAAA,QACE,wBACA,WACA,SAASC,EAAOC,GAGf,MAFAA,GAAMC,OAASF,EAAOG,YAEfH","file":"../loader.js","sourcesContent":["define([\n  \"skylark-fuelux/loader\",\n  \"./sbswt\"\n],function(loader,sbswt){\n   sbswt.Loader = loader.Constructor;\n\n   return loader;\n});\n"]}

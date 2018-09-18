@@ -1,0 +1,1 @@
+{"version":3,"sources":["picker.js"],"names":["define","picker","sbswt","Picker","Constructor"],"mappings":";;;;;;;AAAAA,QACE,wBACA,WACA,SAASC,EAAOC,GAGf,MAFAA,GAAMC,OAASF,EAAOG,YAEfH","file":"../picker.js","sourcesContent":["define([\n  \"skylark-fuelux/picker\",\n  \"./sbswt\"\n],function(picker,sbswt){\n   sbswt.Picker = picker.Constructor;\n\n   return picker;\n});\n"]}
