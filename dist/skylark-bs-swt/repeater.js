@@ -5,5 +5,5 @@
  * @link https://github.com/skylarkui/skylark-bs-swt/
  * @license MIT
  */
-define(["skylark-ui-repeater/repeater","./sbswt"],function(e,r){return r.Repeater=e.Constructor,e});
+define(["skylark-fuelux/repeater","./sbswt"],function(e,r){return r.Repeater=e.Constructor,e});
 //# sourceMappingURL=sourcemaps/repeater.js.map

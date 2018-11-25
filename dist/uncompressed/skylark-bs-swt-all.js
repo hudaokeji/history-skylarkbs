@@ -7,9 +7,9 @@
  */
 (function(factory,globals) {
   var define = globals.define,
-  	  require = globals.require,
-  	  isAmd = (typeof define === 'function' && define.amd),
-  	  isCmd = (!isAmd && typeof exports !== 'undefined');
+      require = globals.require,
+      isAmd = (typeof define === 'function' && define.amd),
+      isCmd = (!isAmd && typeof exports !== 'undefined');
 
   if (!isAmd && !define) {
     var map = {};
@@ -18,7 +18,7 @@
           return relative;
         }
         var stack = base.split("/"),
-            parts = relative.split("/");    
+            parts = relative.split("/");
         stack.pop(); 
         for (var i=0; i<parts.length; i++) {
             if (parts[i] == ".")
@@ -41,7 +41,7 @@
             };
             require(id);
         } else {
-            resolved[id] = factory;
+            map[id] = factory;
         }
     };
     require = globals.require = function(id) {
@@ -56,22 +56,25 @@
                 args.push(require(dep));
             })
 
-            module.exports = module.factory.apply(window, args);
+            module.exports = module.factory.apply(globals, args);
         }
         return module.exports;
     };
   }
+  
+  if (!define) {
+     throw new Error("The module utility (ex: requirejs or skylark-utils) is not loaded!");
+  }
 
   factory(define,require);
 
-  if (!isAmd) { 
-    if (isCmd) {
-      exports = require("skylark-langx/skylark");
-    } else {
-      if (!globals.skylarkjs) {
-         globals.skylarkjs = require("skylark-langx/skylark");
-      }
+  if (!isAmd) {
+    var skylarkjs = require("skylark-langx/skylark");
 
+    if (isCmd) {
+      module.exports = skylarkjs;
+    } else {
+      globals.skylarkjs  = skylarkjs;
     }
   }
 
@@ -84,27 +87,167 @@ define('skylark-langx/skylark',[], function() {
     return skylark;
 });
 
-define('skylark-utils/skylark',["skylark-langx/skylark"], function(skylark) {
+define('skylark-utils-dom/skylark',["skylark-langx/skylark"], function(skylark) {
     return skylark;
 });
 
-define('skylark-langx/langx',["./skylark"], function(skylark) {
-    "use strict";
-    var toString = {}.toString,
-        concat = Array.prototype.concat,
-        indexOf = Array.prototype.indexOf,
+define('skylark-utils-dom/dom',["./skylark"], function(skylark) {
+	return skylark.dom = {};
+});
+
+define('skylark-langx/types',[
+],function(){
+    var type = (function() {
+        var class2type = {};
+
+        // Populate the class2type map
+        "Boolean Number String Function Array Date RegExp Object Error".split(" ").forEach(function(name) {
+            class2type["[object " + name + "]"] = name.toLowerCase();
+        });
+
+        return function type(obj) {
+            return obj == null ? String(obj) :
+                class2type[toString.call(obj)] || "object";
+        };
+    })();
+
+    function isArray(object) {
+        return object && object.constructor === Array;
+    }
+
+    function isArrayLike(obj) {
+        return !isString(obj) && !isHtmlNode(obj) && typeof obj.length == 'number' && !isFunction(obj);
+    }
+
+    function isBoolean(obj) {
+        return typeof(obj) === "boolean";
+    }
+
+    function isDefined(obj) {
+        return typeof obj !== 'undefined';
+    }
+
+    function isDocument(obj) {
+        return obj != null && obj.nodeType == obj.DOCUMENT_NODE;
+    }
+
+    function isEmptyObject(obj) {
+        var name;
+        for (name in obj) {
+            if (obj[name] !== null) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    function isFunction(value) {
+        return type(value) == "function";
+    }
+
+    function isHtmlNode(obj) {
+        return obj && (obj instanceof Node);
+    }
+
+    function isInstanceOf( /*Object*/ value, /*Type*/ type) {
+        //Tests whether the value is an instance of a type.
+        if (value === undefined) {
+            return false;
+        } else if (value === null || type == Object) {
+            return true;
+        } else if (typeof value === "number") {
+            return type === Number;
+        } else if (typeof value === "string") {
+            return type === String;
+        } else if (typeof value === "boolean") {
+            return type === Boolean;
+        } else if (typeof value === "string") {
+            return type === String;
+        } else {
+            return (value instanceof type) || (value && value.isInstanceOf ? value.isInstanceOf(type) : false);
+        }
+    }
+
+    function isNumber(obj) {
+        return typeof obj == 'number';
+    }
+
+    function isObject(obj) {
+        return type(obj) == "object";
+    }
+
+    function isPlainObject(obj) {
+        return isObject(obj) && !isWindow(obj) && Object.getPrototypeOf(obj) == Object.prototype;
+    }
+
+    function isString(obj) {
+        return typeof obj === 'string';
+    }
+
+    function isWindow(obj) {
+        return obj && obj == obj.window;
+    }
+
+    function isSameOrigin(href) {
+        if (href) {
+            var origin = location.protocol + '//' + location.hostname;
+            if (location.port) {
+                origin += ':' + location.port;
+            }
+            return href.startsWith(origin);
+        }
+    }
+
+    return {
+
+        isArray: isArray,
+
+        isArrayLike: isArrayLike,
+
+        isBoolean: isBoolean,
+
+        isDefined: isDefined,
+
+        isDocument: isDocument,
+
+        isEmptyObject: isEmptyObject,
+
+        isFunction: isFunction,
+
+        isHtmlNode: isHtmlNode,
+
+        isNumber: isNumber,
+
+        isObject: isObject,
+
+        isPlainObject: isPlainObject,
+
+        isString: isString,
+
+        isSameOrigin: isSameOrigin,
+
+        isWindow: isWindow,
+
+        type: type
+    };
+
+});
+define('skylark-langx/objects',[
+	"./types"
+],function(types){
+	var hasOwnProperty = Object.prototype.hasOwnProperty,
         slice = Array.prototype.slice,
-        filter = Array.prototype.filter,
-        hasOwnProperty = Object.prototype.hasOwnProperty;
+        isBoolean = types.isBoolean,
+        isFunction = types.isFunction,
+		isObject = types.isObject,
+		isPlainObject = types.isPlainObject,
+		isArray = types.isArray;
 
-
-    var  PGLISTENERS = Symbol ? Symbol() : '__pglisteners';
-
-    // An internal function for creating assigner functions.
+     // An internal function for creating assigner functions.
     function createAssigner(keysFunc, defaults) {
         return function(obj) {
           var length = arguments.length;
-          if (defaults) obj = Object(obj);
+          if (defaults) obj = Object(obj);  
           if (length < 2 || obj == null) return obj;
           for (var index = 1; index < length; index++) {
             var source = arguments[index],
@@ -226,7 +369,935 @@ define('skylark-langx/langx',["./skylark"], function(skylark) {
         return true;
     };
 
-    var undefined, nextId = 0;
+    // Retrieve all the property names of an object.
+    function allKeys(obj) {
+        if (!isObject(obj)) return [];
+        var keys = [];
+        for (var key in obj) keys.push(key);
+        return keys;
+    }
+
+    function each(obj, callback) {
+        var length, key, i, undef, value;
+
+        if (obj) {
+            length = obj.length;
+
+            if (length === undef) {
+                // Loop object items
+                for (key in obj) {
+                    if (obj.hasOwnProperty(key)) {
+                        value = obj[key];
+                        if (callback.call(value, key, value) === false) {
+                            break;
+                        }
+                    }
+                }
+            } else {
+                // Loop array items
+                for (i = 0; i < length; i++) {
+                    value = obj[i];
+                    if (callback.call(value, i, value) === false) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        return this;
+    }
+
+    function extend(target) {
+        var deep, args = slice.call(arguments, 1);
+        if (typeof target == 'boolean') {
+            deep = target
+            target = args.shift()
+        }
+        if (args.length == 0) {
+            args = [target];
+            target = this;
+        }
+        args.forEach(function(arg) {
+            mixin(target, arg, deep);
+        });
+        return target;
+    }
+
+    // Retrieve the names of an object's own properties.
+    // Delegates to **ECMAScript 5**'s native `Object.keys`.
+    function keys(obj) {
+        if (isObject(obj)) return [];
+        var keys = [];
+        for (var key in obj) if (has(obj, key)) keys.push(key);
+        return keys;
+    }
+
+    function has(obj, path) {
+        if (!isArray(path)) {
+            return obj != null && hasOwnProperty.call(obj, path);
+        }
+        var length = path.length;
+        for (var i = 0; i < length; i++) {
+            var key = path[i];
+            if (obj == null || !hasOwnProperty.call(obj, key)) {
+                return false;
+            }
+            obj = obj[key];
+        }
+        return !!length;
+    }
+
+   // Perform a deep comparison to check if two objects are equal.
+    function isEqual(a, b) {
+        return eq(a, b);
+    }
+
+    // Returns whether an object has a given set of `key:value` pairs.
+    function isMatch(object, attrs) {
+        var keys = keys(attrs), length = keys.length;
+        if (object == null) return !length;
+        var obj = Object(object);
+        for (var i = 0; i < length; i++) {
+          var key = keys[i];
+          if (attrs[key] !== obj[key] || !(key in obj)) return false;
+        }
+        return true;
+    }    
+
+    function _mixin(target, source, deep, safe) {
+        for (var key in source) {
+            //if (!source.hasOwnProperty(key)) {
+            //    continue;
+            //}
+            if (safe && target[key] !== undefined) {
+                continue;
+            }
+            if (deep && (isPlainObject(source[key]) || isArray(source[key]))) {
+                if (isPlainObject(source[key]) && !isPlainObject(target[key])) {
+                    target[key] = {};
+                }
+                if (isArray(source[key]) && !isArray(target[key])) {
+                    target[key] = [];
+                }
+                _mixin(target[key], source[key], deep, safe);
+            } else if (source[key] !== undefined) {
+                target[key] = source[key]
+            }
+        }
+        return target;
+    }
+
+    function _parseMixinArgs(args) {
+        var params = slice.call(arguments, 0),
+            target = params.shift(),
+            deep = false;
+        if (isBoolean(params[params.length - 1])) {
+            deep = params.pop();
+        }
+
+        return {
+            target: target,
+            sources: params,
+            deep: deep
+        };
+    }
+
+    function mixin() {
+        var args = _parseMixinArgs.apply(this, arguments);
+
+        args.sources.forEach(function(source) {
+            _mixin(args.target, source, args.deep, false);
+        });
+        return args.target;
+    }
+
+    function removeItem(items, item) {
+        if (isArray(items)) {
+            var idx = items.indexOf(item);
+            if (idx != -1) {
+                items.splice(idx, 1);
+            }
+        } else if (isPlainObject(items)) {
+            for (var key in items) {
+                if (items[key] == item) {
+                    delete items[key];
+                    break;
+                }
+            }
+        }
+
+        return this;
+    }
+
+    function result(obj, path, fallback) {
+        if (!isArray(path)) {
+            path = [path]
+        };
+        var length = path.length;
+        if (!length) {
+          return isFunction(fallback) ? fallback.call(obj) : fallback;
+        }
+        for (var i = 0; i < length; i++) {
+          var prop = obj == null ? void 0 : obj[path[i]];
+          if (prop === void 0) {
+            prop = fallback;
+            i = length; // Ensure we don't continue iterating.
+          }
+          obj = isFunction(prop) ? prop.call(obj) : prop;
+        }
+
+        return obj;
+    }
+
+    function safeMixin() {
+        var args = _parseMixinArgs.apply(this, arguments);
+
+        args.sources.forEach(function(source) {
+            _mixin(args.target, source, args.deep, true);
+        });
+        return args.target;
+    }
+
+    // Retrieve the values of an object's properties.
+    function values(obj) {
+        var keys = _.keys(obj);
+        var length = keys.length;
+        var values = Array(length);
+        for (var i = 0; i < length; i++) {
+            values[i] = obj[keys[i]];
+        }
+        return values;
+    }
+
+
+    
+    function clone( /*anything*/ src,checkCloneMethod) {
+        var copy;
+        if (src === undefined || src === null) {
+            copy = src;
+        } else if (checkCloneMethod && src.clone) {
+            copy = src.clone();
+        } else if (isArray(src)) {
+            copy = [];
+            for (var i = 0; i < src.length; i++) {
+                copy.push(clone(src[i]));
+            }
+        } else if (isPlainObject(src)) {
+            copy = {};
+            for (var key in src) {
+                copy[key] = clone(src[key]);
+            }
+        } else {
+            copy = src;
+        }
+
+        return copy;
+
+    }
+
+    return {
+        allKeys: allKeys,
+
+        clone: clone,
+
+        defaults : createAssigner(allKeys, true),
+
+        each : each,
+
+        extend : extend,
+
+        has: has,
+
+        isEqual: isEqual,
+
+        isMatch: isMatch,
+
+        keys: keys,
+
+        mixin: mixin,
+
+        removeItem: removeItem,
+
+        result : result,
+        
+        safeMixin: safeMixin,
+
+        values: values
+    };
+
+});
+define('skylark-langx/arrays',[
+	"./types",
+    "./objects"
+],function(types,objects){
+	var filter = Array.prototype.filter,
+		isArrayLike = types.isArrayLike;
+
+    function compact(array) {
+        return filter.call(array, function(item) {
+            return item != null;
+        });
+    }
+
+    function flatten(array) {
+        if (isArrayLike(array)) {
+            var result = [];
+            for (var i = 0; i < array.length; i++) {
+                var item = array[i];
+                if (isArrayLike(item)) {
+                    for (var j = 0; j < item.length; j++) {
+                        result.push(item[j]);
+                    }
+                } else {
+                    result.push(item);
+                }
+            }
+            return result;
+        } else {
+            return array;
+        }
+        //return array.length > 0 ? concat.apply([], array) : array;
+    }
+
+    function grep(array, callback) {
+        var out = [];
+
+        each(array, function(i, item) {
+            if (callback(item, i)) {
+                out.push(item);
+            }
+        });
+
+        return out;
+    }
+
+    function inArray(item, array) {
+        if (!array) {
+            return -1;
+        }
+        var i;
+
+        if (array.indexOf) {
+            return array.indexOf(item);
+        }
+
+        i = array.length;
+        while (i--) {
+            if (array[i] === item) {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    function makeArray(obj, offset, startWith) {
+       if (isArrayLike(obj) ) {
+        return (startWith || []).concat(Array.prototype.slice.call(obj, offset || 0));
+      }
+
+      // array of single index
+      return [ obj ];             
+    }
+
+    function map(elements, callback) {
+        var value, values = [],
+            i, key
+        if (isArrayLike(elements))
+            for (i = 0; i < elements.length; i++) {
+                value = callback.call(elements[i], elements[i], i);
+                if (value != null) values.push(value)
+            }
+        else
+            for (key in elements) {
+                value = callback.call(elements[key], elements[key], key);
+                if (value != null) values.push(value)
+            }
+        return flatten(values)
+    }
+
+    function uniq(array) {
+        return filter.call(array, function(item, idx) {
+            return array.indexOf(item) == idx;
+        })
+    }
+
+    return {
+        compact: compact,
+
+        first : function(items,n) {
+            if (n) {
+                return items.slice(0,n);
+            } else {
+                return items[0];
+            }
+        },
+
+	    each: objects.each,
+
+        flatten: flatten,
+
+        inArray: inArray,
+
+        makeArray: makeArray,
+
+        map : map,
+        
+        uniq : uniq
+
+    }
+});
+define('skylark-langx/klass',[
+    "./arrays",
+    "./objects",
+    "./types"
+],function(arrays,objects,types){
+    var uniq = arrays.uniq,
+        has = objects.has,
+        mixin = objects.mixin,
+        isArray = types.isArray,
+        isDefined = types.isDefined;
+    
+    function inherit(ctor, base) {
+        var f = function() {};
+        f.prototype = base.prototype;
+
+        ctor.prototype = new f();
+    }
+
+    var f1 = function() {
+        function extendClass(ctor, props, options) {
+            // Copy the properties to the prototype of the class.
+            var proto = ctor.prototype,
+                _super = ctor.superclass.prototype,
+                noOverrided = options && options.noOverrided;
+
+            for (var name in props) {
+                if (name === "constructor") {
+                    continue;
+                }
+
+                // Check if we're overwriting an existing function
+                var prop = props[name];
+                if (typeof props[name] == "function") {
+                    proto[name] =  !prop._constructor && !noOverrided && typeof _super[name] == "function" ?
+                          (function(name, fn, superFn) {
+                            return function() {
+                                var tmp = this.overrided;
+
+                                // Add a new ._super() method that is the same method
+                                // but on the super-class
+                                this.overrided = superFn;
+
+                                // The method only need to be bound temporarily, so we
+                                // remove it when we're done executing
+                                var ret = fn.apply(this, arguments);
+
+                                this.overrided = tmp;
+
+                                return ret;
+                            };
+                        })(name, prop, _super[name]) :
+                        prop;
+                } else if (typeof prop == "object" && prop!==null && (prop.get)) {
+                    Object.defineProperty(proto,name,prop);
+                } else {
+                    proto[name] = prop;
+                }
+            }
+            return ctor;
+        }
+
+        function serialMixins(ctor,mixins) {
+            var result = [];
+
+            mixins.forEach(function(mixin){
+                if (has(mixin,"__mixins__")) {
+                     throw new Error("nested mixins");
+                }
+                var clss = [];
+                while (mixin) {
+                    clss.unshift(mixin);
+                    mixin = mixin.superclass;
+                }
+                result = result.concat(clss);
+            });
+
+            result = uniq(result);
+
+            result = result.filter(function(mixin){
+                var cls = ctor;
+                while (cls) {
+                    if (mixin === cls) {
+                        return false;
+                    }
+                    if (has(cls,"__mixins__")) {
+                        var clsMixines = cls["__mixins__"];
+                        for (var i=0; i<clsMixines.length;i++) {
+                            if (clsMixines[i]===mixin) {
+                                return false;
+                            }
+                        }
+                    }
+                    cls = cls.superclass;
+                }
+                return true;
+            });
+
+            if (result.length>0) {
+                return result;
+            } else {
+                return false;
+            }
+        }
+
+        function mergeMixins(ctor,mixins) {
+            var newCtor =ctor;
+            for (var i=0;i<mixins.length;i++) {
+                var xtor = new Function();
+                xtor.prototype = Object.create(newCtor.prototype);
+                xtor.__proto__ = newCtor;
+                xtor.superclass = null;
+                mixin(xtor.prototype,mixins[i].prototype);
+                xtor.prototype.__mixin__ = mixins[i];
+                newCtor = xtor;
+            }
+
+            return newCtor;
+        }
+
+        function _constructor ()  {
+            if (this._construct) {
+                return this._construct.apply(this, arguments);
+            } else  if (this.init) {
+                return this.init.apply(this, arguments);
+            }
+        }
+
+        return function createClass(props, parent, mixins,options) {
+            if (isArray(parent)) {
+                options = mixins;
+                mixins = parent;
+                parent = null;
+            }
+            parent = parent || Object;
+
+            if (isDefined(mixins) && !isArray(mixins)) {
+                options = mixins;
+                mixins = false;
+            }
+
+            var innerParent = parent;
+
+            if (mixins) {
+                mixins = serialMixins(innerParent,mixins);
+            }
+
+            if (mixins) {
+                innerParent = mergeMixins(innerParent,mixins);
+            }
+
+            var klassName = props.klassName || "",
+                ctor = new Function(
+                    "return function " + klassName + "() {" +
+                    "var inst = this," +
+                    " ctor = arguments.callee;" +
+                    "if (!(inst instanceof ctor)) {" +
+                    "inst = Object.create(ctor.prototype);" +
+                    "}" +
+                    "return ctor._constructor.apply(inst, arguments) || inst;" + 
+                    "}"
+                )();
+
+
+            // Populate our constructed prototype object
+            ctor.prototype = Object.create(innerParent.prototype);
+
+            // Enforce the constructor to be what we expect
+            ctor.prototype.constructor = ctor;
+            ctor.superclass = parent;
+
+            // And make this class extendable
+            ctor.__proto__ = innerParent;
+
+
+            if (!ctor._constructor) {
+                ctor._constructor = _constructor;
+            } 
+
+            if (mixins) {
+                ctor.__mixins__ = mixins;
+            }
+
+            if (!ctor.partial) {
+                ctor.partial = function(props, options) {
+                    return extendClass(this, props, options);
+                };
+            }
+            if (!ctor.inherit) {
+                ctor.inherit = function(props, mixins,options) {
+                    return createClass(props, this, mixins,options);
+                };
+            }
+
+            ctor.partial(props, options);
+
+            return ctor;
+        };
+    }
+
+    var createClass = f1();
+
+    return createClass;
+});
+define('skylark-langx/ArrayStore',[
+    "./klass"
+],function(klass){
+    var SimpleQueryEngine = function(query, options){
+        // summary:
+        //      Simple query engine that matches using filter functions, named filter
+        //      functions or objects by name-value on a query object hash
+        //
+        // description:
+        //      The SimpleQueryEngine provides a way of getting a QueryResults through
+        //      the use of a simple object hash as a filter.  The hash will be used to
+        //      match properties on data objects with the corresponding value given. In
+        //      other words, only exact matches will be returned.
+        //
+        //      This function can be used as a template for more complex query engines;
+        //      for example, an engine can be created that accepts an object hash that
+        //      contains filtering functions, or a string that gets evaluated, etc.
+        //
+        //      When creating a new dojo.store, simply set the store's queryEngine
+        //      field as a reference to this function.
+        //
+        // query: Object
+        //      An object hash with fields that may match fields of items in the store.
+        //      Values in the hash will be compared by normal == operator, but regular expressions
+        //      or any object that provides a test() method are also supported and can be
+        //      used to match strings by more complex expressions
+        //      (and then the regex's or object's test() method will be used to match values).
+        //
+        // options: dojo/store/api/Store.QueryOptions?
+        //      An object that contains optional information such as sort, start, and count.
+        //
+        // returns: Function
+        //      A function that caches the passed query under the field "matches".  See any
+        //      of the "query" methods on dojo.stores.
+        //
+        // example:
+        //      Define a store with a reference to this engine, and set up a query method.
+        //
+        //  |   var myStore = function(options){
+        //  |       //  ...more properties here
+        //  |       this.queryEngine = SimpleQueryEngine;
+        //  |       //  define our query method
+        //  |       this.query = function(query, options){
+        //  |           return QueryResults(this.queryEngine(query, options)(this.data));
+        //  |       };
+        //  |   };
+
+        // create our matching query function
+        switch(typeof query){
+            default:
+                throw new Error("Can not query with a " + typeof query);
+            case "object": case "undefined":
+                var queryObject = query;
+                query = function(object){
+                    for(var key in queryObject){
+                        var required = queryObject[key];
+                        if(required && required.test){
+                            // an object can provide a test method, which makes it work with regex
+                            if(!required.test(object[key], object)){
+                                return false;
+                            }
+                        }else if(required != object[key]){
+                            return false;
+                        }
+                    }
+                    return true;
+                };
+                break;
+            case "string":
+                // named query
+                if(!this[query]){
+                    throw new Error("No filter function " + query + " was found in store");
+                }
+                query = this[query];
+                // fall through
+            case "function":
+                // fall through
+        }
+        
+        function filter(arr, callback, thisObject){
+            // summary:
+            //      Returns a new Array with those items from arr that match the
+            //      condition implemented by callback.
+            // arr: Array
+            //      the array to iterate over.
+            // callback: Function|String
+            //      a function that is invoked with three arguments (item,
+            //      index, array). The return of this function is expected to
+            //      be a boolean which determines whether the passed-in item
+            //      will be included in the returned array.
+            // thisObject: Object?
+            //      may be used to scope the call to callback
+            // returns: Array
+            // description:
+            //      This function corresponds to the JavaScript 1.6 Array.filter() method, with one difference: when
+            //      run over sparse arrays, this implementation passes the "holes" in the sparse array to
+            //      the callback function with a value of undefined. JavaScript 1.6's filter skips the holes in the sparse array.
+            //      For more details, see:
+            //      https://developer.mozilla.org/en/Core_JavaScript_1.5_Reference/Objects/Array/filter
+            // example:
+            //  | // returns [2, 3, 4]
+            //  | array.filter([1, 2, 3, 4], function(item){ return item>1; });
+
+            // TODO: do we need "Ctr" here like in map()?
+            var i = 0, l = arr && arr.length || 0, out = [], value;
+            if(l && typeof arr == "string") arr = arr.split("");
+            if(typeof callback == "string") callback = cache[callback] || buildFn(callback);
+            if(thisObject){
+                for(; i < l; ++i){
+                    value = arr[i];
+                    if(callback.call(thisObject, value, i, arr)){
+                        out.push(value);
+                    }
+                }
+            }else{
+                for(; i < l; ++i){
+                    value = arr[i];
+                    if(callback(value, i, arr)){
+                        out.push(value);
+                    }
+                }
+            }
+            return out; // Array
+        }
+
+        function execute(array){
+            // execute the whole query, first we filter
+            var results = filter(array, query);
+            // next we sort
+            var sortSet = options && options.sort;
+            if(sortSet){
+                results.sort(typeof sortSet == "function" ? sortSet : function(a, b){
+                    for(var sort, i=0; sort = sortSet[i]; i++){
+                        var aValue = a[sort.attribute];
+                        var bValue = b[sort.attribute];
+                        // valueOf enables proper comparison of dates
+                        aValue = aValue != null ? aValue.valueOf() : aValue;
+                        bValue = bValue != null ? bValue.valueOf() : bValue;
+                        if (aValue != bValue){
+                            // modified by lwf 2016/07/09
+                            //return !!sort.descending == (aValue == null || aValue > bValue) ? -1 : 1;
+                            return !!sort.descending == (aValue == null || aValue > bValue) ? -1 : 1;
+                        }
+                    }
+                    return 0;
+                });
+            }
+            // now we paginate
+            if(options && (options.start || options.count)){
+                var total = results.length;
+                results = results.slice(options.start || 0, (options.start || 0) + (options.count || Infinity));
+                results.total = total;
+            }
+            return results;
+        }
+        execute.matches = query;
+        return execute;
+    };
+
+    var QueryResults = function(results){
+        // summary:
+        //      A function that wraps the results of a store query with additional
+        //      methods.
+        // description:
+        //      QueryResults is a basic wrapper that allows for array-like iteration
+        //      over any kind of returned data from a query.  While the simplest store
+        //      will return a plain array of data, other stores may return deferreds or
+        //      promises; this wrapper makes sure that *all* results can be treated
+        //      the same.
+        //
+        //      Additional methods include `forEach`, `filter` and `map`.
+        // results: Array|dojo/promise/Promise
+        //      The result set as an array, or a promise for an array.
+        // returns:
+        //      An array-like object that can be used for iterating over.
+        // example:
+        //      Query a store and iterate over the results.
+        //
+        //  |   store.query({ prime: true }).forEach(function(item){
+        //  |       //  do something
+        //  |   });
+
+        if(!results){
+            return results;
+        }
+
+        var isPromise = !!results.then;
+        // if it is a promise it may be frozen
+        if(isPromise){
+            results = Object.delegate(results);
+        }
+        function addIterativeMethod(method){
+            // Always add the iterative methods so a QueryResults is
+            // returned whether the environment is ES3 or ES5
+            results[method] = function(){
+                var args = arguments;
+                var result = Deferred.when(results, function(results){
+                    //Array.prototype.unshift.call(args, results);
+                    return QueryResults(Array.prototype[method].apply(results, args));
+                });
+                // forEach should only return the result of when()
+                // when we're wrapping a promise
+                if(method !== "forEach" || isPromise){
+                    return result;
+                }
+            };
+        }
+
+        addIterativeMethod("forEach");
+        addIterativeMethod("filter");
+        addIterativeMethod("map");
+        if(results.total == null){
+            results.total = Deferred.when(results, function(results){
+                return results.length;
+            });
+        }
+        return results; // Object
+    };
+
+    var ArrayStore = klass({
+        "klassName": "ArrayStore",
+
+        "queryEngine": SimpleQueryEngine,
+        
+        "idProperty": "id",
+
+
+        get: function(id){
+            // summary:
+            //      Retrieves an object by its identity
+            // id: Number
+            //      The identity to use to lookup the object
+            // returns: Object
+            //      The object in the store that matches the given id.
+            return this.data[this.index[id]];
+        },
+
+        getIdentity: function(object){
+            return object[this.idProperty];
+        },
+
+        put: function(object, options){
+            var data = this.data,
+                index = this.index,
+                idProperty = this.idProperty;
+            var id = object[idProperty] = (options && "id" in options) ? options.id : idProperty in object ? object[idProperty] : Math.random();
+            if(id in index){
+                // object exists
+                if(options && options.overwrite === false){
+                    throw new Error("Object already exists");
+                }
+                // replace the entry in data
+                data[index[id]] = object;
+            }else{
+                // add the new object
+                index[id] = data.push(object) - 1;
+            }
+            return id;
+        },
+
+        add: function(object, options){
+            (options = options || {}).overwrite = false;
+            // call put with overwrite being false
+            return this.put(object, options);
+        },
+
+        remove: function(id){
+            // summary:
+            //      Deletes an object by its identity
+            // id: Number
+            //      The identity to use to delete the object
+            // returns: Boolean
+            //      Returns true if an object was removed, falsy (undefined) if no object matched the id
+            var index = this.index;
+            var data = this.data;
+            if(id in index){
+                data.splice(index[id], 1);
+                // now we have to reindex
+                this.setData(data);
+                return true;
+            }
+        },
+        query: function(query, options){
+            // summary:
+            //      Queries the store for objects.
+            // query: Object
+            //      The query to use for retrieving objects from the store.
+            // options: dojo/store/api/Store.QueryOptions?
+            //      The optional arguments to apply to the resultset.
+            // returns: dojo/store/api/Store.QueryResults
+            //      The results of the query, extended with iterative methods.
+            //
+            // example:
+            //      Given the following store:
+            //
+            //  |   var store = new Memory({
+            //  |       data: [
+            //  |           {id: 1, name: "one", prime: false },
+            //  |           {id: 2, name: "two", even: true, prime: true},
+            //  |           {id: 3, name: "three", prime: true},
+            //  |           {id: 4, name: "four", even: true, prime: false},
+            //  |           {id: 5, name: "five", prime: true}
+            //  |       ]
+            //  |   });
+            //
+            //  ...find all items where "prime" is true:
+            //
+            //  |   var results = store.query({ prime: true });
+            //
+            //  ...or find all items where "even" is true:
+            //
+            //  |   var results = store.query({ even: true });
+            return QueryResults(this.queryEngine(query, options)(this.data));
+        },
+
+        setData: function(data){
+            // summary:
+            //      Sets the given data as the source for this store, and indexes it
+            // data: Object[]
+            //      An array of objects to use as the source of data.
+            if(data.items){
+                // just for convenience with the data format IFRS expects
+                this.idProperty = data.identifier || this.idProperty;
+                data = this.data = data.items;
+            }else{
+                this.data = data;
+            }
+            this.index = {};
+            for(var i = 0, l = data.length; i < l; i++){
+                this.index[data[i][this.idProperty]] = i;
+            }
+        },
+
+        init: function(options) {
+            for(var i in options){
+                this[i] = options[i];
+            }
+            this.setData(this.data || []);
+        }
+
+    });
+
+	return ArrayStore;
+});
+define('skylark-langx/aspect',[
+],function(){
+
+  var undefined, nextId = 0;
     function advise(dispatcher, type, advice, receiveArguments){
         var previous = dispatcher[type];
         var around = type == "around";
@@ -340,576 +1411,22 @@ define('skylark-langx/langx',["./skylark"], function(skylark) {
         };
     }
 
-    var f1 = function() {
-        function extendClass(ctor, props, options) {
-            // Copy the properties to the prototype of the class.
-            var proto = ctor.prototype,
-                _super = ctor.superclass.prototype,
-                noOverrided = options && options.noOverrided;
-
-            for (var name in props) {
-                if (name === "constructor") {
-                    continue;
-                }
-
-                // Check if we're overwriting an existing function
-                var prop = props[name];
-                if (typeof props[name] == "function") {
-                    proto[name] =  !prop._constructor && !noOverrided && typeof _super[name] == "function" ?
-                          (function(name, fn, superFn) {
-                            return function() {
-                                var tmp = this.overrided;
-
-                                // Add a new ._super() method that is the same method
-                                // but on the super-class
-                                this.overrided = superFn;
-
-                                // The method only need to be bound temporarily, so we
-                                // remove it when we're done executing
-                                var ret = fn.apply(this, arguments);
-
-                                this.overrided = tmp;
-
-                                return ret;
-                            };
-                        })(name, prop, _super[name]) :
-                        prop;
-                } else if (typeof prop == "object" && prop!==null && (prop.get)) {
-                    Object.defineProperty(proto,name,prop);
-                } else {
-                    proto[name] = prop;
-                }
-            }
-            return ctor;
-        }
-
-        function serialMixins(ctor,mixins) {
-            var result = [];
-
-            mixins.forEach(function(mixin){
-                if (has(mixin,"__mixins__")) {
-                     throw new Error("nested mixins");
-                }
-                var clss = [];
-                while (mixin) {
-                    clss.unshift(mixin);
-                    mixin = mixin.superclass;
-                }
-                result = result.concat(clss);
-            });
-
-            result = uniq(result);
-
-            result = result.filter(function(mixin){
-                var cls = ctor;
-                while (cls) {
-                    if (mixin === cls) {
-                        return false;
-                    }
-                    if (has(cls,"__mixins__")) {
-                        var clsMixines = cls["__mixins__"];
-                        for (var i=0; i<clsMixines.length;i++) {
-                            if (clsMixines[i]===mixin) {
-                                return false;
-                            }
-                        }
-                    }
-                    cls = cls.superclass;
-                }
-                return true;
-            });
-
-            if (result.length>0) {
-                return result;
-            } else {
-                return false;
-            }
-        }
-
-        function mergeMixins(ctor,mixins) {
-            var newCtor =ctor;
-            for (var i=0;i<mixins.length;i++) {
-                var xtor = new Function();
-                xtor.prototype = Object.create(newCtor.prototype);
-                xtor.__proto__ = newCtor;
-                xtor.superclass = null;
-                mixin(xtor.prototype,mixins[i].prototype);
-                xtor.prototype.__mixin__ = mixins[i];
-                newCtor = xtor;
-            }
-
-            return newCtor;
-        }
-
-        return function createClass(props, parent, mixins,options) {
-            if (isArray(parent)) {
-                options = mixins;
-                mixins = parent;
-                parent = null;
-            }
-            parent = parent || Object;
-
-            if (isDefined(mixins) && !isArray(mixins)) {
-                options = mixins;
-                mixins = false;
-            }
-
-            var innerParent = parent;
-
-            if (mixins) {
-                mixins = serialMixins(innerParent,mixins);
-            }
-
-            if (mixins) {
-                innerParent = mergeMixins(innerParent,mixins);
-            }
-
-
-            var _constructor = props.constructor;
-            if (_constructor === Object) {
-                _constructor = function() {
-                    if (this.init) {
-                        return this.init.apply(this, arguments);
-                    }
-                };
-            };
-
-            var klassName = props.klassName || "",
-                ctor = new Function(
-                    "return function " + klassName + "() {" +
-                    "var inst = this," +
-                    " ctor = arguments.callee;" +
-                    "if (!(inst instanceof ctor)) {" +
-                    "inst = Object.create(ctor.prototype);" +
-                    "}" +
-                    "return ctor._constructor.apply(inst, arguments) || inst;" + 
-                    "}"
-                )();
-
-
-            ctor._constructor = _constructor;
-            // Populate our constructed prototype object
-            ctor.prototype = Object.create(innerParent.prototype);
-
-            // Enforce the constructor to be what we expect
-            ctor.prototype.constructor = ctor;
-            ctor.superclass = parent;
-
-            // And make this class extendable
-            ctor.__proto__ = innerParent;
-
-            if (mixins) {
-                ctor.__mixins__ = mixins;
-            }
-
-            if (!ctor.partial) {
-                ctor.partial = function(props, options) {
-                    return extendClass(this, props, options);
-                };
-            }
-            if (!ctor.inherit) {
-                ctor.inherit = function(props, mixins,options) {
-                    return createClass(props, this, mixins,options);
-                };
-            }
-
-            ctor.partial(props, options);
-
-            return ctor;
-        };
-    }
-
-    var createClass = f1();
-
-
-    // Retrieve all the property names of an object.
-    function allKeys(obj) {
-        if (!isObject(obj)) return [];
-        var keys = [];
-        for (var key in obj) keys.push(key);
-        return keys;
-    }
-
-    function createEvent(type, props) {
-        var e = new CustomEvent(type, props);
-
-        return safeMixin(e, props);
-    }
-    
-    function debounce(fn, wait) {
-        var timeout,
-            args,
-            later = function() {
-                fn.apply(null, args);
-            };
-
-        return function() {
-            args = arguments;
-            clearTimeout(timeout);
-            timeout = setTimeout(later, wait);
-        };
-    }
-
-    var delegate = (function() {
-        // boodman/crockford delegation w/ cornford optimization
-        function TMP() {}
-        return function(obj, props) {
-            TMP.prototype = obj;
-            var tmp = new TMP();
-            TMP.prototype = null;
-            if (props) {
-                mixin(tmp, props);
-            }
-            return tmp; // Object
-        };
-    })();
-
-
-    // Retrieve the values of an object's properties.
-    function values(obj) {
-        var keys = _.keys(obj);
-        var length = keys.length;
-        var values = Array(length);
-        for (var i = 0; i < length; i++) {
-            values[i] = obj[keys[i]];
-        }
-        return values;
-    }
-    
-    function clone( /*anything*/ src,checkCloneMethod) {
-        var copy;
-        if (src === undefined || src === null) {
-            copy = src;
-        } else if (checkCloneMethod && src.clone) {
-            copy = src.clone();
-        } else if (isArray(src)) {
-            copy = [];
-            for (var i = 0; i < src.length; i++) {
-                copy.push(clone(src[i]));
-            }
-        } else if (isPlainObject(src)) {
-            copy = {};
-            for (var key in src) {
-                copy[key] = clone(src[key]);
-            }
-        } else {
-            copy = src;
-        }
-
-        return copy;
-
-    }
-
-    function compact(array) {
-        return filter.call(array, function(item) {
-            return item != null;
-        });
-    }
-
-    /*
-     * Converts camel case into dashes.
-     * @param {String} str
-     * @return {String}
-     * @exapmle marginTop -> margin-top
-     */
-    function dasherize(str) {
-        return str.replace(/::/g, '/')
-            .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
-            .replace(/([a-z\d])([A-Z])/g, '$1_$2')
-            .replace(/_/g, '-')
-            .toLowerCase();
-    }
-
-    function deserializeValue(value) {
-        try {
-            return value ?
-                value == "true" ||
-                (value == "false" ? false :
-                    value == "null" ? null :
-                    +value + "" == value ? +value :
-                    /^[\[\{]/.test(value) ? JSON.parse(value) :
-                    value) : value;
-        } catch (e) {
-            return value;
-        }
-    }
-
-    function each(obj, callback) {
-        var length, key, i, undef, value;
-
-        if (obj) {
-            length = obj.length;
-
-            if (length === undef) {
-                // Loop object items
-                for (key in obj) {
-                    if (obj.hasOwnProperty(key)) {
-                        value = obj[key];
-                        if (callback.call(value, key, value) === false) {
-                            break;
-                        }
-                    }
-                }
-            } else {
-                // Loop array items
-                for (i = 0; i < length; i++) {
-                    value = obj[i];
-                    if (callback.call(value, i, value) === false) {
-                        break;
-                    }
-                }
-            }
-        }
-
-        return this;
-    }
-
-    function flatten(array) {
-        if (isArrayLike(array)) {
-            var result = [];
-            for (var i = 0; i < array.length; i++) {
-                var item = array[i];
-                if (isArrayLike(item)) {
-                    for (var j = 0; j < item.length; j++) {
-                        result.push(item[j]);
-                    }
-                } else {
-                    result.push(item);
-                }
-            }
-            return result;
-        } else {
-            return array;
-        }
-        //return array.length > 0 ? concat.apply([], array) : array;
-    }
-
-    function funcArg(context, arg, idx, payload) {
-        return isFunction(arg) ? arg.call(context, idx, payload) : arg;
-    }
-
-    var getAbsoluteUrl = (function() {
-        var a;
-
-        return function(url) {
-            if (!a) a = document.createElement('a');
-            a.href = url;
-
-            return a.href;
-        };
-    })();
-
-    function getQueryParams(url) {
-        var url = url || window.location.href,
-            segs = url.split("?"),
-            params = {};
-
-        if (segs.length > 1) {
-            segs[1].split("&").forEach(function(queryParam) {
-                var nv = queryParam.split('=');
-                params[nv[0]] = nv[1];
-            });
-        }
-        return params;
-    }
-
-    function grep(array, callback) {
-        var out = [];
-
-        each(array, function(i, item) {
-            if (callback(item, i)) {
-                out.push(item);
-            }
-        });
-
-        return out;
-    }
-
-
-    function has(obj, path) {
-        if (!isArray(path)) {
-            return obj != null && hasOwnProperty.call(obj, path);
-        }
-        var length = path.length;
-        for (var i = 0; i < length; i++) {
-            var key = path[i];
-            if (obj == null || !hasOwnProperty.call(obj, key)) {
-                return false;
-            }
-            obj = obj[key];
-        }
-        return !!length;
-    }
-
-    function inArray(item, array) {
-        if (!array) {
-            return -1;
-        }
-        var i;
-
-        if (array.indexOf) {
-            return array.indexOf(item);
-        }
-
-        i = array.length;
-        while (i--) {
-            if (array[i] === item) {
-                return i;
-            }
-        }
-
-        return -1;
-    }
-
-    function inherit(ctor, base) {
-        var f = function() {};
-        f.prototype = base.prototype;
-
-        ctor.prototype = new f();
-    }
-
-    function isArray(object) {
-        return object && object.constructor === Array;
-    }
-
-    function isArrayLike(obj) {
-        return !isString(obj) && !isHtmlNode(obj) && typeof obj.length == 'number' && !isFunction(obj);
-    }
-
-    function isBoolean(obj) {
-        return typeof(obj) === "boolean";
-    }
-
-    function isDocument(obj) {
-        return obj != null && obj.nodeType == obj.DOCUMENT_NODE;
-    }
-
-
-
-  // Perform a deep comparison to check if two objects are equal.
-    function isEqual(a, b) {
-        return eq(a, b);
-    }
-
-    function isFunction(value) {
-        return type(value) == "function";
-    }
-
-    function isObject(obj) {
-        return type(obj) == "object";
-    }
-
-    function isPlainObject(obj) {
-        return isObject(obj) && !isWindow(obj) && Object.getPrototypeOf(obj) == Object.prototype;
-    }
-
-    function isString(obj) {
-        return typeof obj === 'string';
-    }
-
-    function isWindow(obj) {
-        return obj && obj == obj.window;
-    }
-
-    function isDefined(obj) {
-        return typeof obj !== 'undefined';
-    }
-
-    function isHtmlNode(obj) {
-        return obj && (obj instanceof Node);
-    }
-
-    function isInstanceOf( /*Object*/ value, /*Type*/ type) {
-        //Tests whether the value is an instance of a type.
-        if (value === undefined) {
-            return false;
-        } else if (value === null || type == Object) {
-            return true;
-        } else if (typeof value === "number") {
-            return type === Number;
-        } else if (typeof value === "string") {
-            return type === String;
-        } else if (typeof value === "boolean") {
-            return type === Boolean;
-        } else if (typeof value === "string") {
-            return type === String;
-        } else {
-            return (value instanceof type) || (value && value.isInstanceOf ? value.isInstanceOf(type) : false);
-        }
-    }
-
-    function isNumber(obj) {
-        return typeof obj == 'number';
-    }
-
-    function isSameOrigin(href) {
-        if (href) {
-            var origin = location.protocol + '//' + location.hostname;
-            if (location.port) {
-                origin += ':' + location.port;
-            }
-            return href.startsWith(origin);
-        }
-    }
-
-
-    function isEmptyObject(obj) {
-        var name;
-        for (name in obj) {
-            if (obj[name] !== null) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    // Returns whether an object has a given set of `key:value` pairs.
-    function isMatch(object, attrs) {
-        var keys = keys(attrs), length = keys.length;
-        if (object == null) return !length;
-        var obj = Object(object);
-        for (var i = 0; i < length; i++) {
-          var key = keys[i];
-          if (attrs[key] !== obj[key] || !(key in obj)) return false;
-        }
-        return true;
-    }    
-
-    // Retrieve the names of an object's own properties.
-    // Delegates to **ECMAScript 5**'s native `Object.keys`.
-    function keys(obj) {
-        if (isObject(obj)) return [];
-        var keys = [];
-        for (var key in obj) if (has(obj, key)) keys.push(key);
-        return keys;
-    }
-
-    function makeArray(obj, offset, startWith) {
-       if (isArrayLike(obj) ) {
-        return (startWith || []).concat(Array.prototype.slice.call(obj, offset || 0));
-      }
-
-      // array of single index
-      return [ obj ];             
-    }
-
-
-
-    function map(elements, callback) {
-        var value, values = [],
-            i, key
-        if (isArrayLike(elements))
-            for (i = 0; i < elements.length; i++) {
-                value = callback.call(elements[i], elements[i], i);
-                if (value != null) values.push(value)
-            }
-        else
-            for (key in elements) {
-                value = callback.call(elements[key], elements[key], key);
-                if (value != null) values.push(value)
-            }
-        return flatten(values)
-    }
+    return {
+        after: aspect("after"),
+ 
+        around: aspect("around"),
+        
+        before: aspect("before")
+    };
+});
+define('skylark-langx/funcs',[
+    "./objects",
+	"./types"
+],function(objects,types){
+	var mixin = objects.mixin,
+        slice = Array.prototype.slice,
+        isFunction = types.isFunction,
+        isString = types.isString;
 
     function defer(fn) {
         if (requestAnimationFrame) {
@@ -942,208 +1459,113 @@ define('skylark-langx/langx',["./skylark"], function(skylark) {
         }
     }
 
-
-    function toPixel(value) {
-        // style values can be floats, client code may want
-        // to round for integer pixels.
-        return parseFloat(value) || 0;
+    function debounce(fn, wait) {
+        var timeout;
+        return function () {
+            var context = this, args = arguments;
+            var later = function () {
+                timeout = null;
+                fn.apply(context, args);
+            };
+            if (timeout) clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
     }
-
-    var type = (function() {
-        var class2type = {};
-
-        // Populate the class2type map
-        each("Boolean Number String Function Array Date RegExp Object Error".split(" "), function(i, name) {
-            class2type["[object " + name + "]"] = name.toLowerCase();
-        });
-
-        return function type(obj) {
-            return obj == null ? String(obj) :
-                class2type[toString.call(obj)] || "object";
+   
+    var delegate = (function() {
+        // boodman/crockford delegation w/ cornford optimization
+        function TMP() {}
+        return function(obj, props) {
+            TMP.prototype = obj;
+            var tmp = new TMP();
+            TMP.prototype = null;
+            if (props) {
+                mixin(tmp, props);
+            }
+            return tmp; // Object
         };
     })();
 
-    function trim(str) {
-        return str == null ? "" : String.prototype.trim.call(str);
-    }
 
-    function removeItem(items, item) {
-        if (isArray(items)) {
-            var idx = items.indexOf(item);
-            if (idx != -1) {
-                items.splice(idx, 1);
-            }
-        } else if (isPlainObject(items)) {
-            for (var key in items) {
-                if (items[key] == item) {
-                    delete items[key];
-                    break;
-                }
-            }
+    return {
+        debounce: debounce,
+
+        delegate: delegate,
+
+        defer: defer,
+
+        noop : noop,
+
+        proxy: proxy,
+
+        returnTrue: function() {
+            return true;
+        },
+
+        returnFalse: function() {
+            return false;
         }
+    };
+});
+define('skylark-langx/Deferred',[
+    "./arrays",
+	"./funcs",
+    "./objects"
+],function(arrays,funcs,objects){
+    "use strict";
+    
+    var  PGLISTENERS = Symbol ? Symbol() : '__pglisteners';
 
-        return this;
-    }
+    var slice = Array.prototype.slice,
+        proxy = funcs.proxy,
+        makeArray = arrays.makeArray,
+        result = objects.result,
+        mixin = objects.mixin;
 
-    function _mixin(target, source, deep, safe) {
-        for (var key in source) {
-            //if (!source.hasOwnProperty(key)) {
-            //    continue;
-            //}
-            if (safe && target[key] !== undefined) {
-                continue;
-            }
-            if (deep && (isPlainObject(source[key]) || isArray(source[key]))) {
-                if (isPlainObject(source[key]) && !isPlainObject(target[key])) {
-                    target[key] = {};
-                }
-                if (isArray(source[key]) && !isArray(target[key])) {
-                    target[key] = [];
-                }
-                _mixin(target[key], source[key], deep, safe);
-            } else if (source[key] !== undefined) {
-                target[key] = source[key]
-            }
+    mixin(Promise.prototype,{
+        always: function(handler) {
+            //this.done(handler);
+            //this.fail(handler);
+            this.then(handler,handler);
+            return this;
+        },
+        done : function(handler) {
+            this.then(handler);
+            return this;
+        },
+        fail : function(handler) { 
+            //return mixin(Promise.prototype.catch.call(this,handler),added);
+            //return this.then(null,handler);
+            this.catch(handler);
+            return this;
         }
-        return target;
-    }
+    });
 
-    function _parseMixinArgs(args) {
-        var params = slice.call(arguments, 0),
-            target = params.shift(),
-            deep = false;
-        if (isBoolean(params[params.length - 1])) {
-            deep = params.pop();
-        }
-
-        return {
-            target: target,
-            sources: params,
-            deep: deep
-        };
-    }
-
-    function mixin() {
-        var args = _parseMixinArgs.apply(this, arguments);
-
-        args.sources.forEach(function(source) {
-            _mixin(args.target, source, args.deep, false);
-        });
-        return args.target;
-    }
-
-    function result(obj, path, fallback) {
-        if (!isArray(path)) {
-            path = [path]
-        };
-        var length = path.length;
-        if (!length) {
-          return isFunction(fallback) ? fallback.call(obj) : fallback;
-        }
-        for (var i = 0; i < length; i++) {
-          var prop = obj == null ? void 0 : obj[path[i]];
-          if (prop === void 0) {
-            prop = fallback;
-            i = length; // Ensure we don't continue iterating.
-          }
-          obj = isFunction(prop) ? prop.call(obj) : prop;
-        }
-
-        return obj;
-    }
-
-    function safeMixin() {
-        var args = _parseMixinArgs.apply(this, arguments);
-
-        args.sources.forEach(function(source) {
-            _mixin(args.target, source, args.deep, true);
-        });
-        return args.target;
-    }
-
-    function substitute( /*String*/ template,
-        /*Object|Array*/
-        map,
-        /*Function?*/
-        transform,
-        /*Object?*/
-        thisObject) {
-        // summary:
-        //    Performs parameterized substitutions on a string. Throws an
-        //    exception if any parameter is unmatched.
-        // template:
-        //    a string with expressions in the form `${key}` to be replaced or
-        //    `${key:format}` which specifies a format function. keys are case-sensitive.
-        // map:
-        //    hash to search for substitutions
-        // transform:
-        //    a function to process all parameters before substitution takes
-
-
-        thisObject = thisObject || window;
-        transform = transform ?
-            proxy(thisObject, transform) : function(v) {
-                return v;
-            };
-
-        function getObject(key, map) {
-            if (key.match(/\./)) {
-                var retVal,
-                    getValue = function(keys, obj) {
-                        var _k = keys.pop();
-                        if (_k) {
-                            if (!obj[_k]) return null;
-                            return getValue(keys, retVal = obj[_k]);
-                        } else {
-                            return retVal;
-                        }
-                    };
-                return getValue(key.split(".").reverse(), map);
-            } else {
-                return map[key];
-            }
-        }
-
-        return template.replace(/\$\{([^\s\:\}]+)(?:\:([^\s\:\}]+))?\}/g,
-            function(match, key, format) {
-                var value = getObject(key, map);
-                if (format) {
-                    value = getObject(format, thisObject).call(thisObject, value, key);
-                }
-                return transform(value, key).toString();
-            }); // String
-    }
-
-    var _uid = 1;
-
-    function uid(obj) {
-        return obj._uid || (obj._uid = _uid++);
-    }
-
-    function uniq(array) {
-        return filter.call(array, function(item, idx) {
-            return array.indexOf(item) == idx;
-        })
-    }
-
-    var idCounter = 0;
-    function uniqueId (prefix) {
-        var id = ++idCounter + '';
-        return prefix ? prefix + id : id;
-    }
 
     var Deferred = function() {
         var self = this,
             p = this.promise = new Promise(function(resolve, reject) {
                 self._resolve = resolve;
                 self._reject = reject;
-            }),
-           added = {
+            });
+
+        wrapPromise(p,self);
+
+        this[PGLISTENERS] = [];
+
+        //this.resolve = Deferred.prototype.resolve.bind(this);
+        //this.reject = Deferred.prototype.reject.bind(this);
+        //this.progress = Deferred.prototype.progress.bind(this);
+
+    };
+
+    function wrapPromise(p,d) {
+        var   added = {
                 state : function() {
-                    if (self.isResolved()) {
+                    if (d.isResolved()) {
                         return 'resolved';
                     }
-                    if (self.isRejected()) {
+                    if (d.isRejected()) {
                         return 'rejected';
                     }
                     return 'pending';
@@ -1168,36 +1590,17 @@ define('skylark-langx/langx',["./skylark"], function(skylark) {
                                 }
                             }),added);
                 },
-                always: function(handler) {
-                    //this.done(handler);
-                    //this.fail(handler);
-                    this.then(handler,handler);
-                    return this;
-                },
-                done : function(handler) {
-                    return this.then(handler);
-                },
-                fail : function(handler) { 
-                    //return mixin(Promise.prototype.catch.call(this,handler),added);
-                    return this.then(null,handler);
-                }, 
                 progress : function(handler) {
-                    self[PGLISTENERS].push(handler);
+                    d[PGLISTENERS].push(handler);
                     return this;
                 }
 
             };
 
         added.pipe = added.then;
-        mixin(p,added);
+        return mixin(p,added);
 
-        this[PGLISTENERS] = [];
-
-        //this.resolve = Deferred.prototype.resolve.bind(this);
-        //this.reject = Deferred.prototype.reject.bind(this);
-        //this.progress = Deferred.prototype.progress.bind(this);
-
-    };
+    }
 
     Deferred.prototype.resolve = function(value) {
         var args = slice.call(arguments);
@@ -1252,11 +1655,11 @@ define('skylark-langx/langx',["./skylark"], function(skylark) {
     Deferred.prototype.done  = Deferred.prototype.then;
 
     Deferred.all = function(array) {
-        return Promise.all(array);
+        return wrapPromise(Promise.all(array));
     };
 
     Deferred.first = function(array) {
-        return Promise.race(array);
+        return wrapPromise(Promise.race(array));
     };
 
 
@@ -1270,10 +1673,10 @@ define('skylark-langx/langx',["./skylark"], function(skylark) {
             } else {
                 return new Deferred().resolve(valueOrPromise);
             }
-//        } else if (!nativePromise) {
-//            var deferred = new Deferred(valueOrPromise.cancel);
-//            valueOrPromise.then(deferred.resolve, deferred.reject, deferred.progress);
-//            valueOrPromise = deferred.promise;
+        } else if (!nativePromise) {
+            var deferred = new Deferred(valueOrPromise.cancel);
+            valueOrPromise.then(proxy(deferred.resolve,deferred), proxy(deferred.reject,deferred), deferred.progress);
+            valueOrPromise = deferred.promise;
         }
 
         if (callback || errback || progback) {
@@ -1290,13 +1693,84 @@ define('skylark-langx/langx',["./skylark"], function(skylark) {
 
     Deferred.resolve = function(data) {
         var d = new Deferred();
-        d.resolve(data);
+        d.resolve.apply(d,arguments);
         return d.promise;
     };
 
     Deferred.immediate = Deferred.resolve;
 
-    var Evented = createClass({
+    return Deferred;
+});
+define('skylark-langx/async',[
+    "./Deferred",
+    "./arrays"
+],function(Deferred,arrays){
+    var each = arrays.each;
+    
+    var async = {
+        parallel : function(arr,args,ctx) {
+            var rets = [];
+            ctx = ctx || null;
+            args = args || [];
+
+            each(arr,function(i,func){
+                rets.push(func.apply(ctx,args));
+            });
+
+            return Deferred.all(rets);
+        },
+
+        series : function(arr,args,ctx) {
+            var rets = [],
+                d = new Deferred(),
+                p = d.promise;
+
+            ctx = ctx || null;
+            args = args || [];
+
+            d.resolve();
+            each(arr,function(i,func){
+                p = p.then(function(){
+                    return func.apply(ctx,args);
+                });
+                rets.push(p);
+            });
+
+            return Deferred.all(rets);
+        },
+
+        waterful : function(arr,args,ctx) {
+            var d = new Deferred(),
+                p = d.promise;
+
+            ctx = ctx || null;
+            args = args || [];
+
+            d.resolveWith(ctx,args);
+
+            each(arr,function(i,func){
+                p = p.then(func);
+            });
+            return p;
+        }
+    };
+
+	return async;	
+});
+define('skylark-langx/Evented',[
+    "./klass",
+    "./objects",
+	"./types"
+],function(klass,objects,types){
+	var slice = Array.prototype.slice,
+        isDefined = types.isDefined,
+        isPlainObject = types.isPlainObject,
+		isFunction = types.isFunction,
+		isString = types.isString,
+		isEmptyObject = types.isEmptyObject,
+		mixin = objects.mixin;
+
+    var Evented = klass({
         on: function(events, selector, data, callback, ctx, /*used internally*/ one) {
             var self = this,
                 _hub = this._hub || (this._hub = {});
@@ -1524,591 +1998,154 @@ define('skylark-langx/langx',["./skylark"], function(skylark) {
         }
     });
 
-    var Stateful = Evented.inherit({
-        init : function(attributes, options) {
-            var attrs = attributes || {};
-            options || (options = {});
-            this.cid = uniqueId(this.cidPrefix);
-            this.attributes = {};
-            if (options.collection) this.collection = options.collection;
-            if (options.parse) attrs = this.parse(attrs, options) || {};
-            var defaults = result(this, 'defaults');
-            attrs = mixin({}, defaults, attrs);
-            this.set(attrs, options);
-            this.changed = {};
-        },
+	return Evented;
 
-        // A hash of attributes whose current and previous value differ.
-        changed: null,
+});
+define('skylark-langx/strings',[
+],function(){
 
-        // The value returned during the last failed validation.
-        validationError: null,
+     /*
+     * Converts camel case into dashes.
+     * @param {String} str
+     * @return {String}
+     * @exapmle marginTop -> margin-top
+     */
+    function dasherize(str) {
+        return str.replace(/::/g, '/')
+            .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
+            .replace(/([a-z\d])([A-Z])/g, '$1_$2')
+            .replace(/_/g, '-')
+            .toLowerCase();
+    }
 
-        // The default name for the JSON `id` attribute is `"id"`. MongoDB and
-        // CouchDB users may want to set this to `"_id"`.
-        idAttribute: 'id',
-
-        // The prefix is used to create the client id which is used to identify models locally.
-        // You may want to override this if you're experiencing name clashes with model ids.
-        cidPrefix: 'c',
-
-
-        // Return a copy of the model's `attributes` object.
-        toJSON: function(options) {
-          return clone(this.attributes);
-        },
-
-
-        // Get the value of an attribute.
-        get: function(attr) {
-          return this.attributes[attr];
-        },
-
-        // Returns `true` if the attribute contains a value that is not null
-        // or undefined.
-        has: function(attr) {
-          return this.get(attr) != null;
-        },
-
-        // Set a hash of model attributes on the object, firing `"change"`. This is
-        // the core primitive operation of a model, updating the data and notifying
-        // anyone who needs to know about the change in state. The heart of the beast.
-        set: function(key, val, options) {
-          if (key == null) return this;
-
-          // Handle both `"key", value` and `{key: value}` -style arguments.
-          var attrs;
-          if (typeof key === 'object') {
-            attrs = key;
-            options = val;
-          } else {
-            (attrs = {})[key] = val;
-          }
-
-          options || (options = {});
-
-          // Run validation.
-          if (!this._validate(attrs, options)) return false;
-
-          // Extract attributes and options.
-          var unset      = options.unset;
-          var silent     = options.silent;
-          var changes    = [];
-          var changing   = this._changing;
-          this._changing = true;
-
-          if (!changing) {
-            this._previousAttributes = clone(this.attributes);
-            this.changed = {};
-          }
-
-          var current = this.attributes;
-          var changed = this.changed;
-          var prev    = this._previousAttributes;
-
-          // For each `set` attribute, update or delete the current value.
-          for (var attr in attrs) {
-            val = attrs[attr];
-            if (!isEqual(current[attr], val)) changes.push(attr);
-            if (!isEqual(prev[attr], val)) {
-              changed[attr] = val;
-            } else {
-              delete changed[attr];
-            }
-            unset ? delete current[attr] : current[attr] = val;
-          }
-
-          // Update the `id`.
-          if (this.idAttribute in attrs) this.id = this.get(this.idAttribute);
-
-          // Trigger all relevant attribute changes.
-          if (!silent) {
-            if (changes.length) this._pending = options;
-            for (var i = 0; i < changes.length; i++) {
-              this.trigger('change:' + changes[i], this, current[changes[i]], options);
-            }
-          }
-
-          // You might be wondering why there's a `while` loop here. Changes can
-          // be recursively nested within `"change"` events.
-          if (changing) return this;
-          if (!silent) {
-            while (this._pending) {
-              options = this._pending;
-              this._pending = false;
-              this.trigger('change', this, options);
-            }
-          }
-          this._pending = false;
-          this._changing = false;
-          return this;
-        },
-
-        // Remove an attribute from the model, firing `"change"`. `unset` is a noop
-        // if the attribute doesn't exist.
-        unset: function(attr, options) {
-          return this.set(attr, void 0, mixin({}, options, {unset: true}));
-        },
-
-        // Clear all attributes on the model, firing `"change"`.
-        clear: function(options) {
-          var attrs = {};
-          for (var key in this.attributes) attrs[key] = void 0;
-          return this.set(attrs, mixin({}, options, {unset: true}));
-        },
-
-        // Determine if the model has changed since the last `"change"` event.
-        // If you specify an attribute name, determine if that attribute has changed.
-        hasChanged: function(attr) {
-          if (attr == null) return !isEmptyObject(this.changed);
-          return this.changed[attr] !== undefined;
-        },
-
-        // Return an object containing all the attributes that have changed, or
-        // false if there are no changed attributes. Useful for determining what
-        // parts of a view need to be updated and/or what attributes need to be
-        // persisted to the server. Unset attributes will be set to undefined.
-        // You can also pass an attributes object to diff against the model,
-        // determining if there *would be* a change.
-        changedAttributes: function(diff) {
-          if (!diff) return this.hasChanged() ? clone(this.changed) : false;
-          var old = this._changing ? this._previousAttributes : this.attributes;
-          var changed = {};
-          for (var attr in diff) {
-            var val = diff[attr];
-            if (isEqual(old[attr], val)) continue;
-            changed[attr] = val;
-          }
-          return !isEmptyObject(changed) ? changed : false;
-        },
-
-        // Get the previous value of an attribute, recorded at the time the last
-        // `"change"` event was fired.
-        previous: function(attr) {
-          if (attr == null || !this._previousAttributes) return null;
-          return this._previousAttributes[attr];
-        },
-
-        // Get all of the attributes of the model at the time of the previous
-        // `"change"` event.
-        previousAttributes: function() {
-          return clone(this._previousAttributes);
-        },
-
-        // Create a new model with identical attributes to this one.
-        clone: function() {
-          return new this.constructor(this.attributes);
-        },
-
-        // A model is new if it has never been saved to the server, and lacks an id.
-        isNew: function() {
-          return !this.has(this.idAttribute);
-        },
-
-        // Check if the model is currently in a valid state.
-        isValid: function(options) {
-          return this._validate({}, mixin({}, options, {validate: true}));
-        },
-
-        // Run validation against the next complete set of model attributes,
-        // returning `true` if all is well. Otherwise, fire an `"invalid"` event.
-        _validate: function(attrs, options) {
-          if (!options.validate || !this.validate) return true;
-          attrs = mixin({}, this.attributes, attrs);
-          var error = this.validationError = this.validate(attrs, options) || null;
-          if (!error) return true;
-          this.trigger('invalid', this, error, mixin(options, {validationError: error}));
-          return false;
+    function deserializeValue(value) {
+        try {
+            return value ?
+                value == "true" ||
+                (value == "false" ? false :
+                    value == "null" ? null :
+                    +value + "" == value ? +value :
+                    /^[\[\{]/.test(value) ? JSON.parse(value) :
+                    value) : value;
+        } catch (e) {
+            return value;
         }
-    });
+    }
 
-    var SimpleQueryEngine = function(query, options){
+    function trim(str) {
+        return str == null ? "" : String.prototype.trim.call(str);
+    }
+    function substitute( /*String*/ template,
+        /*Object|Array*/
+        map,
+        /*Function?*/
+        transform,
+        /*Object?*/
+        thisObject) {
         // summary:
-        //      Simple query engine that matches using filter functions, named filter
-        //      functions or objects by name-value on a query object hash
-        //
-        // description:
-        //      The SimpleQueryEngine provides a way of getting a QueryResults through
-        //      the use of a simple object hash as a filter.  The hash will be used to
-        //      match properties on data objects with the corresponding value given. In
-        //      other words, only exact matches will be returned.
-        //
-        //      This function can be used as a template for more complex query engines;
-        //      for example, an engine can be created that accepts an object hash that
-        //      contains filtering functions, or a string that gets evaluated, etc.
-        //
-        //      When creating a new dojo.store, simply set the store's queryEngine
-        //      field as a reference to this function.
-        //
-        // query: Object
-        //      An object hash with fields that may match fields of items in the store.
-        //      Values in the hash will be compared by normal == operator, but regular expressions
-        //      or any object that provides a test() method are also supported and can be
-        //      used to match strings by more complex expressions
-        //      (and then the regex's or object's test() method will be used to match values).
-        //
-        // options: dojo/store/api/Store.QueryOptions?
-        //      An object that contains optional information such as sort, start, and count.
-        //
-        // returns: Function
-        //      A function that caches the passed query under the field "matches".  See any
-        //      of the "query" methods on dojo.stores.
-        //
-        // example:
-        //      Define a store with a reference to this engine, and set up a query method.
-        //
-        //  |   var myStore = function(options){
-        //  |       //  ...more properties here
-        //  |       this.queryEngine = SimpleQueryEngine;
-        //  |       //  define our query method
-        //  |       this.query = function(query, options){
-        //  |           return QueryResults(this.queryEngine(query, options)(this.data));
-        //  |       };
-        //  |   };
+        //    Performs parameterized substitutions on a string. Throws an
+        //    exception if any parameter is unmatched.
+        // template:
+        //    a string with expressions in the form `${key}` to be replaced or
+        //    `${key:format}` which specifies a format function. keys are case-sensitive.
+        // map:
+        //    hash to search for substitutions
+        // transform:
+        //    a function to process all parameters before substitution takes
 
-        // create our matching query function
-        switch(typeof query){
-            default:
-                throw new Error("Can not query with a " + typeof query);
-            case "object": case "undefined":
-                var queryObject = query;
-                query = function(object){
-                    for(var key in queryObject){
-                        var required = queryObject[key];
-                        if(required && required.test){
-                            // an object can provide a test method, which makes it work with regex
-                            if(!required.test(object[key], object)){
-                                return false;
-                            }
-                        }else if(required != object[key]){
-                            return false;
-                        }
-                    }
-                    return true;
-                };
-                break;
-            case "string":
-                // named query
-                if(!this[query]){
-                    throw new Error("No filter function " + query + " was found in store");
-                }
-                query = this[query];
-                // fall through
-            case "function":
-                // fall through
-        }
-        
-        function filter(arr, callback, thisObject){
-            // summary:
-            //      Returns a new Array with those items from arr that match the
-            //      condition implemented by callback.
-            // arr: Array
-            //      the array to iterate over.
-            // callback: Function|String
-            //      a function that is invoked with three arguments (item,
-            //      index, array). The return of this function is expected to
-            //      be a boolean which determines whether the passed-in item
-            //      will be included in the returned array.
-            // thisObject: Object?
-            //      may be used to scope the call to callback
-            // returns: Array
-            // description:
-            //      This function corresponds to the JavaScript 1.6 Array.filter() method, with one difference: when
-            //      run over sparse arrays, this implementation passes the "holes" in the sparse array to
-            //      the callback function with a value of undefined. JavaScript 1.6's filter skips the holes in the sparse array.
-            //      For more details, see:
-            //      https://developer.mozilla.org/en/Core_JavaScript_1.5_Reference/Objects/Array/filter
-            // example:
-            //  | // returns [2, 3, 4]
-            //  | array.filter([1, 2, 3, 4], function(item){ return item>1; });
 
-            // TODO: do we need "Ctr" here like in map()?
-            var i = 0, l = arr && arr.length || 0, out = [], value;
-            if(l && typeof arr == "string") arr = arr.split("");
-            if(typeof callback == "string") callback = cache[callback] || buildFn(callback);
-            if(thisObject){
-                for(; i < l; ++i){
-                    value = arr[i];
-                    if(callback.call(thisObject, value, i, arr)){
-                        out.push(value);
-                    }
-                }
-            }else{
-                for(; i < l; ++i){
-                    value = arr[i];
-                    if(callback(value, i, arr)){
-                        out.push(value);
-                    }
-                }
-            }
-            return out; // Array
-        }
-
-        function execute(array){
-            // execute the whole query, first we filter
-            var results = filter(array, query);
-            // next we sort
-            var sortSet = options && options.sort;
-            if(sortSet){
-                results.sort(typeof sortSet == "function" ? sortSet : function(a, b){
-                    for(var sort, i=0; sort = sortSet[i]; i++){
-                        var aValue = a[sort.attribute];
-                        var bValue = b[sort.attribute];
-                        // valueOf enables proper comparison of dates
-                        aValue = aValue != null ? aValue.valueOf() : aValue;
-                        bValue = bValue != null ? bValue.valueOf() : bValue;
-                        if (aValue != bValue){
-                            // modified by lwf 2016/07/09
-                            //return !!sort.descending == (aValue == null || aValue > bValue) ? -1 : 1;
-                            return !!sort.descending == (aValue == null || aValue > bValue) ? -1 : 1;
-                        }
-                    }
-                    return 0;
-                });
-            }
-            // now we paginate
-            if(options && (options.start || options.count)){
-                var total = results.length;
-                results = results.slice(options.start || 0, (options.start || 0) + (options.count || Infinity));
-                results.total = total;
-            }
-            return results;
-        }
-        execute.matches = query;
-        return execute;
-    };
-
-    var QueryResults = function(results){
-        // summary:
-        //      A function that wraps the results of a store query with additional
-        //      methods.
-        // description:
-        //      QueryResults is a basic wrapper that allows for array-like iteration
-        //      over any kind of returned data from a query.  While the simplest store
-        //      will return a plain array of data, other stores may return deferreds or
-        //      promises; this wrapper makes sure that *all* results can be treated
-        //      the same.
-        //
-        //      Additional methods include `forEach`, `filter` and `map`.
-        // results: Array|dojo/promise/Promise
-        //      The result set as an array, or a promise for an array.
-        // returns:
-        //      An array-like object that can be used for iterating over.
-        // example:
-        //      Query a store and iterate over the results.
-        //
-        //  |   store.query({ prime: true }).forEach(function(item){
-        //  |       //  do something
-        //  |   });
-
-        if(!results){
-            return results;
-        }
-
-        var isPromise = !!results.then;
-        // if it is a promise it may be frozen
-        if(isPromise){
-            results = Object.delegate(results);
-        }
-        function addIterativeMethod(method){
-            // Always add the iterative methods so a QueryResults is
-            // returned whether the environment is ES3 or ES5
-            results[method] = function(){
-                var args = arguments;
-                var result = Deferred.when(results, function(results){
-                    //Array.prototype.unshift.call(args, results);
-                    return QueryResults(Array.prototype[method].apply(results, args));
-                });
-                // forEach should only return the result of when()
-                // when we're wrapping a promise
-                if(method !== "forEach" || isPromise){
-                    return result;
-                }
+        thisObject = thisObject || window;
+        transform = transform ?
+            proxy(thisObject, transform) : function(v) {
+                return v;
             };
+
+        function getObject(key, map) {
+            if (key.match(/\./)) {
+                var retVal,
+                    getValue = function(keys, obj) {
+                        var _k = keys.pop();
+                        if (_k) {
+                            if (!obj[_k]) return null;
+                            return getValue(keys, retVal = obj[_k]);
+                        } else {
+                            return retVal;
+                        }
+                    };
+                return getValue(key.split(".").reverse(), map);
+            } else {
+                return map[key];
+            }
         }
 
-        addIterativeMethod("forEach");
-        addIterativeMethod("filter");
-        addIterativeMethod("map");
-        if(results.total == null){
-            results.total = Deferred.when(results, function(results){
-                return results.length;
-            });
-        }
-        return results; // Object
-    };
-
-    var async = {
-        parallel : function(arr,args,ctx) {
-            var rets = [];
-            ctx = ctx || null;
-            args = args || [];
-
-            each(arr,function(i,func){
-                rets.push(func.apply(ctx,args));
-            });
-
-            return Deferred.all(rets);
-        },
-
-        series : function(arr,args,ctx) {
-            var rets = [],
-                d = new Deferred(),
-                p = d.promise;
-
-            ctx = ctx || null;
-            args = args || [];
-
-            d.resolve();
-            each(arr,function(i,func){
-                p = p.then(function(){
-                    return func.apply(ctx,args);
-                });
-                rets.push(p);
-            });
-
-            return Deferred.all(rets);
-        },
-
-        waterful : function(arr,args,ctx) {
-            var d = new Deferred(),
-                p = d.promise;
-
-            ctx = ctx || null;
-            args = args || [];
-
-            d.resolveWith(ctx,args);
-
-            each(arr,function(i,func){
-                p = p.then(func);
-            });
-            return p;
-        }
-    };
-
-    var ArrayStore = createClass({
-        "klassName": "ArrayStore",
-
-        "queryEngine": SimpleQueryEngine,
-        
-        "idProperty": "id",
-
-
-        get: function(id){
-            // summary:
-            //      Retrieves an object by its identity
-            // id: Number
-            //      The identity to use to lookup the object
-            // returns: Object
-            //      The object in the store that matches the given id.
-            return this.data[this.index[id]];
-        },
-
-        getIdentity: function(object){
-            return object[this.idProperty];
-        },
-
-        put: function(object, options){
-            var data = this.data,
-                index = this.index,
-                idProperty = this.idProperty;
-            var id = object[idProperty] = (options && "id" in options) ? options.id : idProperty in object ? object[idProperty] : Math.random();
-            if(id in index){
-                // object exists
-                if(options && options.overwrite === false){
-                    throw new Error("Object already exists");
+        return template.replace(/\$\{([^\s\:\}]+)(?:\:([^\s\:\}]+))?\}/g,
+            function(match, key, format) {
+                var value = getObject(key, map);
+                if (format) {
+                    value = getObject(format, thisObject).call(thisObject, value, key);
                 }
-                // replace the entry in data
-                data[index[id]] = object;
-            }else{
-                // add the new object
-                index[id] = data.push(object) - 1;
-            }
-            return id;
+                return transform(value, key).toString();
+            }); // String
+    }
+
+	return {
+        camelCase: function(str) {
+            return str.replace(/-([\da-z])/g, function(a) {
+                return a.toUpperCase().replace('-', '');
+            });
         },
 
-        add: function(object, options){
-            (options = options || {}).overwrite = false;
-            // call put with overwrite being false
-            return this.put(object, options);
+
+        dasherize: dasherize,
+
+        deserializeValue: deserializeValue,
+
+        lowerFirst: function(str) {
+            return str.charAt(0).toLowerCase() + str.slice(1);
         },
 
-        remove: function(id){
-            // summary:
-            //      Deletes an object by its identity
-            // id: Number
-            //      The identity to use to delete the object
-            // returns: Boolean
-            //      Returns true if an object was removed, falsy (undefined) if no object matched the id
-            var index = this.index;
-            var data = this.data;
-            if(id in index){
-                data.splice(index[id], 1);
-                // now we have to reindex
-                this.setData(data);
-                return true;
-            }
-        },
-        query: function(query, options){
-            // summary:
-            //      Queries the store for objects.
-            // query: Object
-            //      The query to use for retrieving objects from the store.
-            // options: dojo/store/api/Store.QueryOptions?
-            //      The optional arguments to apply to the resultset.
-            // returns: dojo/store/api/Store.QueryResults
-            //      The results of the query, extended with iterative methods.
-            //
-            // example:
-            //      Given the following store:
-            //
-            //  |   var store = new Memory({
-            //  |       data: [
-            //  |           {id: 1, name: "one", prime: false },
-            //  |           {id: 2, name: "two", even: true, prime: true},
-            //  |           {id: 3, name: "three", prime: true},
-            //  |           {id: 4, name: "four", even: true, prime: false},
-            //  |           {id: 5, name: "five", prime: true}
-            //  |       ]
-            //  |   });
-            //
-            //  ...find all items where "prime" is true:
-            //
-            //  |   var results = store.query({ prime: true });
-            //
-            //  ...or find all items where "even" is true:
-            //
-            //  |   var results = store.query({ even: true });
-            return QueryResults(this.queryEngine(query, options)(this.data));
+        serializeValue: function(value) {
+            return JSON.stringify(value)
         },
 
-        setData: function(data){
-            // summary:
-            //      Sets the given data as the source for this store, and indexes it
-            // data: Object[]
-            //      An array of objects to use as the source of data.
-            if(data.items){
-                // just for convenience with the data format IFRS expects
-                this.idProperty = data.identifier || this.idProperty;
-                data = this.data = data.items;
-            }else{
-                this.data = data;
-            }
-            this.index = {};
-            for(var i = 0, l = data.length; i < l; i++){
-                this.index[data[i][this.idProperty]] = i;
-            }
-        },
 
-        init: function(options) {
-            for(var i in options){
-                this[i] = options[i];
-            }
-            this.setData(this.data || []);
+        substitute: substitute,
+
+        trim: trim,
+
+        upperFirst: function(str) {
+            return str.charAt(0).toUpperCase() + str.slice(1);
         }
+	} ; 
 
-    });
+});
+define('skylark-langx/Xhr',[
+    "./arrays",
+    "./Deferred",
+    "./Evented",
+    "./objects",
+    "./funcs",
+    "./types"
+],function(arrays,Deferred,Evented,objects,funcs,types){
+    var each = arrays.each,
+        mixin = objects.mixin,
+        noop = funcs.noop,
+        isArray = types.isArray,
+        isFunction = types.isFunction,
+        isPlainObject = types.isPlainObject,
+        type = types.type;
+ 
+     var getAbsoluteUrl = (function() {
+        var a;
 
+        return function(url) {
+            if (!a) a = document.createElement('a');
+            a.href = url;
+
+            return a.href;
+        };
+    })();
+   
     var Xhr = (function(){
         var jsonpID = 0,
             key,
@@ -2428,6 +2465,17 @@ define('skylark-langx/langx',["./skylark"], function(skylark) {
         return Xhr;
     })();
 
+	return Xhr;	
+});
+define('skylark-langx/Restful',[
+    "./Evented",
+    "./objects",
+    "./strings",
+    "./Xhr"
+],function(Evented,objects,strings,Xhr){
+    var mixin = objects.mixin,
+        substitute = strings.substitute;
+
     var Restful = Evented.inherit({
         "klassName" : "Restful",
 
@@ -2435,7 +2483,7 @@ define('skylark-langx/langx',["./skylark"], function(skylark) {
         
         getBaseUrl : function(args) {
             //$$baseEndpoint : "/files/${fileId}/comments",
-            var baseEndpoint = String.substitute(this.baseEndpoint,args),
+            var baseEndpoint = substitute(this.baseEndpoint,args),
                 baseUrl = this.server + this.basePath + baseEndpoint;
             if (args[this.idAttribute]!==undefined) {
                 baseUrl = baseUrl + "/" + args[this.idAttribute]; 
@@ -2545,172 +2593,323 @@ define('skylark-langx/langx',["./skylark"], function(skylark) {
             mixin(this,params);
  //           this._xhr = XHRx();
        }
-
-
     });
+
+    return Restful;
+});
+define('skylark-langx/Stateful',[
+	"./Evented"
+],function(Evented){
+    var Stateful = Evented.inherit({
+        init : function(attributes, options) {
+            var attrs = attributes || {};
+            options || (options = {});
+            this.cid = uniqueId(this.cidPrefix);
+            this.attributes = {};
+            if (options.collection) this.collection = options.collection;
+            if (options.parse) attrs = this.parse(attrs, options) || {};
+            var defaults = result(this, 'defaults');
+            attrs = mixin({}, defaults, attrs);
+            this.set(attrs, options);
+            this.changed = {};
+        },
+
+        // A hash of attributes whose current and previous value differ.
+        changed: null,
+
+        // The value returned during the last failed validation.
+        validationError: null,
+
+        // The default name for the JSON `id` attribute is `"id"`. MongoDB and
+        // CouchDB users may want to set this to `"_id"`.
+        idAttribute: 'id',
+
+        // The prefix is used to create the client id which is used to identify models locally.
+        // You may want to override this if you're experiencing name clashes with model ids.
+        cidPrefix: 'c',
+
+
+        // Return a copy of the model's `attributes` object.
+        toJSON: function(options) {
+          return clone(this.attributes);
+        },
+
+
+        // Get the value of an attribute.
+        get: function(attr) {
+          return this.attributes[attr];
+        },
+
+        // Returns `true` if the attribute contains a value that is not null
+        // or undefined.
+        has: function(attr) {
+          return this.get(attr) != null;
+        },
+
+        // Set a hash of model attributes on the object, firing `"change"`. This is
+        // the core primitive operation of a model, updating the data and notifying
+        // anyone who needs to know about the change in state. The heart of the beast.
+        set: function(key, val, options) {
+          if (key == null) return this;
+
+          // Handle both `"key", value` and `{key: value}` -style arguments.
+          var attrs;
+          if (typeof key === 'object') {
+            attrs = key;
+            options = val;
+          } else {
+            (attrs = {})[key] = val;
+          }
+
+          options || (options = {});
+
+          // Run validation.
+          if (!this._validate(attrs, options)) return false;
+
+          // Extract attributes and options.
+          var unset      = options.unset;
+          var silent     = options.silent;
+          var changes    = [];
+          var changing   = this._changing;
+          this._changing = true;
+
+          if (!changing) {
+            this._previousAttributes = clone(this.attributes);
+            this.changed = {};
+          }
+
+          var current = this.attributes;
+          var changed = this.changed;
+          var prev    = this._previousAttributes;
+
+          // For each `set` attribute, update or delete the current value.
+          for (var attr in attrs) {
+            val = attrs[attr];
+            if (!isEqual(current[attr], val)) changes.push(attr);
+            if (!isEqual(prev[attr], val)) {
+              changed[attr] = val;
+            } else {
+              delete changed[attr];
+            }
+            unset ? delete current[attr] : current[attr] = val;
+          }
+
+          // Update the `id`.
+          if (this.idAttribute in attrs) this.id = this.get(this.idAttribute);
+
+          // Trigger all relevant attribute changes.
+          if (!silent) {
+            if (changes.length) this._pending = options;
+            for (var i = 0; i < changes.length; i++) {
+              this.trigger('change:' + changes[i], this, current[changes[i]], options);
+            }
+          }
+
+          // You might be wondering why there's a `while` loop here. Changes can
+          // be recursively nested within `"change"` events.
+          if (changing) return this;
+          if (!silent) {
+            while (this._pending) {
+              options = this._pending;
+              this._pending = false;
+              this.trigger('change', this, options);
+            }
+          }
+          this._pending = false;
+          this._changing = false;
+          return this;
+        },
+
+        // Remove an attribute from the model, firing `"change"`. `unset` is a noop
+        // if the attribute doesn't exist.
+        unset: function(attr, options) {
+          return this.set(attr, void 0, mixin({}, options, {unset: true}));
+        },
+
+        // Clear all attributes on the model, firing `"change"`.
+        clear: function(options) {
+          var attrs = {};
+          for (var key in this.attributes) attrs[key] = void 0;
+          return this.set(attrs, mixin({}, options, {unset: true}));
+        },
+
+        // Determine if the model has changed since the last `"change"` event.
+        // If you specify an attribute name, determine if that attribute has changed.
+        hasChanged: function(attr) {
+          if (attr == null) return !isEmptyObject(this.changed);
+          return this.changed[attr] !== undefined;
+        },
+
+        // Return an object containing all the attributes that have changed, or
+        // false if there are no changed attributes. Useful for determining what
+        // parts of a view need to be updated and/or what attributes need to be
+        // persisted to the server. Unset attributes will be set to undefined.
+        // You can also pass an attributes object to diff against the model,
+        // determining if there *would be* a change.
+        changedAttributes: function(diff) {
+          if (!diff) return this.hasChanged() ? clone(this.changed) : false;
+          var old = this._changing ? this._previousAttributes : this.attributes;
+          var changed = {};
+          for (var attr in diff) {
+            var val = diff[attr];
+            if (isEqual(old[attr], val)) continue;
+            changed[attr] = val;
+          }
+          return !isEmptyObject(changed) ? changed : false;
+        },
+
+        // Get the previous value of an attribute, recorded at the time the last
+        // `"change"` event was fired.
+        previous: function(attr) {
+          if (attr == null || !this._previousAttributes) return null;
+          return this._previousAttributes[attr];
+        },
+
+        // Get all of the attributes of the model at the time of the previous
+        // `"change"` event.
+        previousAttributes: function() {
+          return clone(this._previousAttributes);
+        },
+
+        // Create a new model with identical attributes to this one.
+        clone: function() {
+          return new this.constructor(this.attributes);
+        },
+
+        // A model is new if it has never been saved to the server, and lacks an id.
+        isNew: function() {
+          return !this.has(this.idAttribute);
+        },
+
+        // Check if the model is currently in a valid state.
+        isValid: function(options) {
+          return this._validate({}, mixin({}, options, {validate: true}));
+        },
+
+        // Run validation against the next complete set of model attributes,
+        // returning `true` if all is well. Otherwise, fire an `"invalid"` event.
+        _validate: function(attrs, options) {
+          if (!options.validate || !this.validate) return true;
+          attrs = mixin({}, this.attributes, attrs);
+          var error = this.validationError = this.validate(attrs, options) || null;
+          if (!error) return true;
+          this.trigger('invalid', this, error, mixin(options, {validationError: error}));
+          return false;
+        }
+    });
+
+	return Stateful;
+});
+define('skylark-langx/langx',[
+    "./skylark",
+    "./arrays",
+    "./ArrayStore",
+    "./aspect",
+    "./async",
+    "./Deferred",
+    "./Evented",
+    "./funcs",
+    "./klass",
+    "./objects",
+    "./Restful",
+    "./Stateful",
+    "./strings",
+    "./types",
+    "./Xhr"
+], function(skylark,arrays,ArrayStore,aspect,async,Deferred,Evented,funcs,klass,objects,Restful,Stateful,strings,types,Xhr) {
+    "use strict";
+    var toString = {}.toString,
+        concat = Array.prototype.concat,
+        indexOf = Array.prototype.indexOf,
+        slice = Array.prototype.slice,
+        filter = Array.prototype.filter,
+        mixin = objects.mixin,
+        safeMixin = objects.safeMixin,
+        isFunction = types.isFunction;
+
+
+    function createEvent(type, props) {
+        var e = new CustomEvent(type, props);
+
+        return safeMixin(e, props);
+    }
+    
+
+    function funcArg(context, arg, idx, payload) {
+        return isFunction(arg) ? arg.call(context, idx, payload) : arg;
+    }
+
+    function getQueryParams(url) {
+        var url = url || window.location.href,
+            segs = url.split("?"),
+            params = {};
+
+        if (segs.length > 1) {
+            segs[1].split("&").forEach(function(queryParam) {
+                var nv = queryParam.split('=');
+                params[nv[0]] = nv[1];
+            });
+        }
+        return params;
+    }
+
+
+    function toPixel(value) {
+        // style values can be floats, client code may want
+        // to round for integer pixels.
+        return parseFloat(value) || 0;
+    }
+
+
+    var _uid = 1;
+
+    function uid(obj) {
+        return obj._uid || (obj._uid = _uid++);
+    }
+
+    var idCounter = 0;
+    function uniqueId (prefix) {
+        var id = ++idCounter + '';
+        return prefix ? prefix + id : id;
+    }
+
 
     function langx() {
         return langx;
     }
 
     mixin(langx, {
-        after: aspect("after"),
-
-        allKeys: allKeys,
-
-        around: aspect("around"),
-
-        ArrayStore : ArrayStore,
-
-        async : async,
-        
-        before: aspect("before"),
-
-        camelCase: function(str) {
-            return str.replace(/-([\da-z])/g, function(a) {
-                return a.toUpperCase().replace('-', '');
-            });
-        },
-
-        clone: clone,
-
-        compact: compact,
-
         createEvent : createEvent,
-
-        dasherize: dasherize,
-
-        debounce: debounce,
-
-        defaults : createAssigner(allKeys, true),
-
-        delegate: delegate,
-
-        Deferred: Deferred,
-
-        Evented: Evented,
-
-        defer: defer,
-
-        deserializeValue: deserializeValue,
-
-        each: each,
-
-        first : function(items,n) {
-            if (n) {
-                return items.slice(0,n);
-            } else {
-                return items[0];
-            }
-        },
-
-        flatten: flatten,
 
         funcArg: funcArg,
 
         getQueryParams: getQueryParams,
 
-        has: has,
-
-        inArray: inArray,
-
-        isArray: isArray,
-
-        isArrayLike: isArrayLike,
-
-        isBoolean: isBoolean,
-
-        isDefined: function(v) {
-            return v !== undefined;
-        },
-
-        isDocument: isDocument,
-
-        isEmptyObject: isEmptyObject,
-
-        isEqual: isEqual,
-
-        isFunction: isFunction,
-
-        isHtmlNode: isHtmlNode,
-
-        isMatch: isMatch,
-
-        isNumber: isNumber,
-
-        isObject: isObject,
-
-        isPlainObject: isPlainObject,
-
-        isString: isString,
-
-        isSameOrigin: isSameOrigin,
-
-        isWindow: isWindow,
-
-        keys: keys,
-
-        klass: function(props, parent,mixins, options) {
-            return createClass(props, parent, mixins,options);
-        },
-
-        lowerFirst: function(str) {
-            return str.charAt(0).toLowerCase() + str.slice(1);
-        },
-
-        makeArray: makeArray,
-
-        map: map,
-
-        mixin: mixin,
-
-        noop : noop,
-
-        proxy: proxy,
-
-        removeItem: removeItem,
-
-        Restful: Restful,
-
-        result : result,
-        
-        returnTrue: function() {
-            return true;
-        },
-
-        returnFalse: function() {
-            return false;
-        },
-
-        safeMixin: safeMixin,
-
-        serializeValue: function(value) {
-            return JSON.stringify(value)
-        },
-
-        Stateful: Stateful,
-
-        substitute: substitute,
-
         toPixel: toPixel,
-
-        trim: trim,
-
-        type: type,
 
         uid: uid,
 
-        uniq: uniq,
-
         uniqueId: uniqueId,
 
-        upperFirst: function(str) {
-            return str.charAt(0).toUpperCase() + str.slice(1);
-        },
+        URL: typeof window !== "undefined" ? window.URL || window.webkitURL : null
 
-        URL: typeof window !== "undefined" ? window.URL || window.webkitURL : null,
+    });
 
-        values: values,
+
+    mixin(langx, arrays,aspect,funcs,objects,strings,types,{
+        ArrayStore : ArrayStore,
+
+        async : async,
+        
+        Deferred: Deferred,
+
+        Evented: Evented,
+
+        klass : klass,
+
+        Restful: Restful,
+        
+        Stateful: Stateful,
 
         Xhr: Xhr
 
@@ -2718,19 +2917,29 @@ define('skylark-langx/langx',["./skylark"], function(skylark) {
 
     return skylark.langx = langx;
 });
-define('skylark-utils/langx',[
+define('skylark-utils-dom/langx',[
     "skylark-langx/langx"
 ], function(langx) {
     return langx;
 });
 
-define('skylark-utils/browser',[
-    "./skylark",
+define('skylark-utils-dom/browser',[
+    "./dom",
     "./langx"
-], function(skylark,langx) {
+], function(dom,langx) {
+    "use strict";
+ 
     var checkedCssProperties = {
-        "transitionproperty": "TransitionProperty",
-    };
+            "transitionproperty": "TransitionProperty",
+        },
+        transEndEventNames = {
+          WebkitTransition : 'webkitTransitionEnd',
+          MozTransition    : 'transitionend',
+          OTransition      : 'oTransitionEnd otransitionend',
+          transition       : 'transitionend'
+        },
+        transEndEventName = null;
+
 
     var css3PropPrefix = "",
         css3StylePrefix = "",
@@ -2779,9 +2988,17 @@ define('skylark-utils/browser',[
             var cssPropName = langx.dasherize(matched[2]);
             cssProps[cssPropName] = css3PropPrefix + cssPropName;
 
+            if (transEndEventNames[name]) {
+              transEndEventName = transEndEventNames[name];
+            }
         }
     }
 
+    if (!transEndEventName) {
+        if (testStyle["transition"] !== undefined) {
+            transEndEventName = transEndEventNames["transition"];
+        }
+    }
 
     function normalizeCssEvent(name) {
         return css3EventPrefix ? css3EventPrefix + name : name.toLowerCase();
@@ -2801,6 +3018,8 @@ define('skylark-utils/browser',[
 
     langx.mixin(browser, {
         css3PropPrefix: css3PropPrefix,
+
+        isIE : !!/msie/i.exec( window.navigator.userAgent ),
 
         normalizeStyleProperty: normalizeStyleProperty,
 
@@ -2824,15 +3043,21 @@ define('skylark-utils/browser',[
 
     });
 
+    if  (transEndEventName) {
+        browser.support.transition = {
+            end : transEndEventName
+        };
+    }
+
     testEl = null;
 
-    return skylark.browser = browser;
+    return dom.browser = browser;
 });
 
-define('skylark-utils/styler',[
-    "./skylark",
+define('skylark-utils-dom/styler',[
+    "./dom",
     "./langx"
-], function(skylark, langx) {
+], function(dom, langx) {
     var every = Array.prototype.every,
         forEach = Array.prototype.forEach,
         camelCase = langx.camelCase,
@@ -2959,11 +3184,11 @@ define('skylark-utils/styler',[
             var computedStyle,
                 computedStyle = getComputedStyle(elm, '')
             if (langx.isString(property)) {
-                return elm.style[camelCase(property)] || computedStyle.getPropertyValue(property)
+                return elm.style[camelCase(property)] || computedStyle.getPropertyValue(dasherize(property))
             } else if (langx.isArrayLike(property)) {
                 var props = {}
                 forEach.call(property, function(prop) {
-                    props[prop] = (elm.style[camelCase(prop)] || computedStyle.getPropertyValue(prop))
+                    props[prop] = (elm.style[camelCase(prop)] || computedStyle.getPropertyValue(dasherize(prop)))
                 })
                 return props
             }
@@ -3078,14 +3303,14 @@ define('skylark-utils/styler',[
         toggleClass: toggleClass
     });
 
-    return skylark.styler = styler;
+    return dom.styler = styler;
 });
-define('skylark-utils/noder',[
-    "./skylark",
+define('skylark-utils-dom/noder',[
+    "./dom",
     "./langx",
     "./browser",
     "./styler"
-], function(skylark, langx, browser, styler) {
+], function(dom, langx, browser, styler) {
     var isIE = !!navigator.userAgent.match(/Trident/g) || !!navigator.userAgent.match(/MSIE/g),
         fragmentRE = /^\s*<(\w+|!)[^>]*>/,
         singleTagRE = /^<(\w+)\s*\/?>(?:<\/\1>|)$/,
@@ -3124,6 +3349,36 @@ define('skylark-utils/noder',[
             return name === chkName.toLowerCase();
         }
         return name;
+    };
+
+
+    function activeElement(doc) {
+        doc = doc || document;
+        var el;
+
+        // Support: IE 9 only
+        // IE9 throws an "Unspecified error" accessing document.activeElement from an <iframe>
+        try {
+            el = doc.activeElement;
+        } catch ( error ) {
+            el = doc.body;
+        }
+
+        // Support: IE 9 - 11 only
+        // IE may return null instead of an element
+        // Interestingly, this only seems to occur when NOT in an iframe
+        if ( !el ) {
+            el = doc.body;
+        }
+
+        // Support: IE 11 only
+        // IE11 returns a seemingly empty object in some cases when accessing
+        // document.activeElement from an <iframe>
+        if ( !el.nodeName ) {
+            el = doc.body;
+        }
+
+        return el;
     };
 
     function after(node, placing, copyByClone) {
@@ -3302,6 +3557,48 @@ define('skylark-utils/noder',[
         }
     }
 
+
+    // Selectors
+    function focusable( element, hasTabindex ) {
+        var map, mapName, img, focusableIfVisible, fieldset,
+            nodeName = element.nodeName.toLowerCase();
+
+        if ( "area" === nodeName ) {
+            map = element.parentNode;
+            mapName = map.name;
+            if ( !element.href || !mapName || map.nodeName.toLowerCase() !== "map" ) {
+                return false;
+            }
+            img = $( "img[usemap='#" + mapName + "']" );
+            return img.length > 0 && img.is( ":visible" );
+        }
+
+        if ( /^(input|select|textarea|button|object)$/.test( nodeName ) ) {
+            focusableIfVisible = !element.disabled;
+
+            if ( focusableIfVisible ) {
+
+                // Form controls within a disabled fieldset are disabled.
+                // However, controls within the fieldset's legend do not get disabled.
+                // Since controls generally aren't placed inside legends, we skip
+                // this portion of the check.
+                fieldset = $( element ).closest( "fieldset" )[ 0 ];
+                if ( fieldset ) {
+                    focusableIfVisible = !fieldset.disabled;
+                }
+            }
+        } else if ( "a" === nodeName ) {
+            focusableIfVisible = element.href || hasTabindex;
+        } else {
+            focusableIfVisible = hasTabindex;
+        }
+
+        return focusableIfVisible && $( element ).is( ":visible" ) && visible( $( element ) );
+    };
+
+
+   var rxhtmlTag = /<(?!area|br|col|embed|hr|img|input|link|meta|param)(([\w:]+)[^>]*)\/>/gi;
+ 
     /*   
      * Get the HTML contents of the first element in the set of matched elements.
      * @param {HTMLElement} node
@@ -3313,7 +3610,10 @@ define('skylark-utils/noder',[
         } else {
             this.empty(node);
             html = html || "";
-            if (langx.isString(html) || langx.isNumber(html)) {
+            if (langx.isString(html)) {
+                html = html.replace( rxhtmlTag, "<$1></$2>" );
+            }
+            if (langx.isString(html) || langx.isNumber(html)) {               
                 node.innerHTML = html;
             } else if (langx.isArrayLike(html)) {
                 for (var i = 0; i < html.length; i++) {
@@ -3324,6 +3624,7 @@ define('skylark-utils/noder',[
             }
         }
     }
+
 
     /*   
      * Check to see if a dom node is a descendant of another dom node.
@@ -3462,7 +3763,26 @@ define('skylark-utils/noder',[
 
         return this;
     }
-    /*   
+
+    function scrollParent( elm, includeHidden ) {
+        var position = styler.css(elm,"position" ),
+            excludeStaticParent = position === "absolute",
+            overflowRegex = includeHidden ? /(auto|scroll|hidden)/ : /(auto|scroll)/,
+            scrollParent = this.parents().filter( function() {
+                var parent = $( this );
+                if ( excludeStaticParent && parent.css( "position" ) === "static" ) {
+                    return false;
+                }
+                return overflowRegex.test( parent.css( "overflow" ) + parent.css( "overflow-y" ) +
+                    parent.css( "overflow-x" ) );
+            } ).eq( 0 );
+
+        return position === "fixed" || !scrollParent.length ?
+            $( this[ 0 ].ownerDocument || document ) :
+            scrollParent;
+    };
+
+        /*   
      * Replace an old node with the specified node.
      * @param {Node} node
      * @param {Node} oldNode
@@ -3527,6 +3847,7 @@ define('skylark-utils/noder',[
             update: update
         };
     }
+
 
     /*   
      * traverse the specified node and its descendants, perform the callback function on each
@@ -3599,6 +3920,12 @@ define('skylark-utils/noder',[
     }
 
     langx.mixin(noder, {
+        active  : activeElement,
+
+        blur : function(el) {
+            el.blur();
+        },
+
         body: function() {
             return document.body;
         },
@@ -3619,6 +3946,8 @@ define('skylark-utils/noder',[
         empty: empty,
 
         fullScreen: fullScreen,
+
+        focusable: focusable,
 
         html: html,
 
@@ -3661,14 +3990,14 @@ define('skylark-utils/noder',[
         unwrap: unwrap
     });
 
-    return skylark.noder = noder;
+    return dom.noder = noder;
 });
-define('skylark-utils/finder',[
-    "./skylark",
+define('skylark-utils-dom/finder',[
+    "./dom",
     "./langx",
     "./browser",
     "./noder"
-], function(skylark, langx, browser, noder, velm) {
+], function(dom, langx, browser, noder, velm) {
     var local = {},
         filter = Array.prototype.filter,
         slice = Array.prototype.slice,
@@ -3948,6 +4277,10 @@ define('skylark-utils/finder',[
             return document.activeElement === elm && (elm.href || elm.type || elm.tabindex);
         },
 
+        'focusable': function( elm ) {
+            return noder.focusable(elm, elm.tabindex != null );
+        },
+
         'first': function(elm, idx) {
             return (idx === 0);
         },
@@ -3999,6 +4332,12 @@ define('skylark-utils/finder',[
 
         'selected': function(elm) {
             return !!elm.selected;
+        },
+
+        'tabbable': function(elm) {
+            var tabIndex = elm.tabindex,
+                hasTabindex = tabIndex != null;
+            return ( !hasTabindex || tabIndex >= 0 ) && noder.focusable( element, hasTabindex );
         },
 
         'text': function(elm) {
@@ -4759,13 +5098,13 @@ define('skylark-utils/finder',[
         siblings: siblings
     });
 
-    return skylark.finder = finder;
+    return dom.finder = finder;
 });
-define('skylark-utils/datax',[
-    "./skylark",
+define('skylark-utils-dom/datax',[
+    "./dom",
     "./langx",
     "./finder"
-], function(skylark, langx, finder) {
+], function(dom, langx, finder) {
     var map = Array.prototype.map,
         filter = Array.prototype.filter,
         camelCase = langx.camelCase,
@@ -4901,7 +5240,7 @@ define('skylark-utils/datax',[
             _setData(elm, name, value);
             return this;
         }
-    } +
+    } 
     /*
      * Remove from the element all items that have not yet been run. 
      * @param {Object} elm  
@@ -5017,6 +5356,12 @@ define('skylark-utils/datax',[
         }
     }
 
+
+    finder.pseudos.data = function( elem, i, match,dataName ) {
+        return !!data( elem, dataName || match[3]);
+    };
+   
+
     function datax() {
         return datax;
     }
@@ -5045,16 +5390,16 @@ define('skylark-utils/datax',[
         val: val
     });
 
-    return skylark.datax = datax;
+    return dom.datax = datax;
 });
-define('skylark-utils/eventer',[
-    "./skylark",
+define('skylark-utils-dom/eventer',[
+    "./dom",
     "./langx",
     "./browser",
     "./finder",
     "./noder",
     "./datax"
-], function(skylark, langx, browser, finder, noder, datax) {
+], function(dom, langx, browser, finder, noder, datax) {
     var mixin = langx.mixin,
         each = langx.each,
         slice = Array.prototype.slice,
@@ -5689,6 +6034,16 @@ define('skylark-utils/eventer',[
 
     }
 
+    if (browser.support.transition) {
+        specialEvents.transitionEnd = {
+//          handle: function (e) {
+//            if ($(e.target).is(this)) return e.handleObj.handler.apply(this, arguments)
+//          },
+          bindType: browser.support.transition.end,
+          delegateType: browser.support.transition.end
+        }        
+    }
+
     function eventer() {
         return eventer;
     }
@@ -5718,14 +6073,14 @@ define('skylark-utils/eventer',[
 
     });
 
-    return skylark.eventer = eventer;
+    return dom.eventer = eventer;
 });
-define('skylark-utils/geom',[
-    "./skylark",
+define('skylark-utils-dom/geom',[
+    "./dom",
     "./langx",
     "./noder",
     "./styler"
-], function(skylark, langx, noder, styler) {
+], function(dom, langx, noder, styler) {
     var rootNodeRE = /^(?:body|html)$/i,
         px = langx.toPixel,
         offsetParent = noder.offsetParent,
@@ -5762,7 +6117,14 @@ define('skylark-utils/geom',[
      * @param {HTMLElement} elm
      */
     function borderExtents(elm) {
-        var s = getComputedStyle(elm);
+        if (noder.isWindow(elm)) {
+            return {
+                left : 0,
+                top : 0,
+                right : 0,
+                bottom : 0
+            }
+        }        var s = getComputedStyle(elm);
         return {
             left: px(s.borderLeftWidth, elm),
             top: px(s.borderTopWidth, elm),
@@ -5954,6 +6316,14 @@ define('skylark-utils/geom',[
      * @param {HTMLElement} elm
      */
     function marginExtents(elm) {
+        if (noder.isWindow(elm)) {
+            return {
+                left : 0,
+                top : 0,
+                right : 0,
+                bottom : 0
+            }
+        }
         var s = getComputedStyle(elm);
         return {
             left: px(s.marginLeft),
@@ -5965,8 +6335,8 @@ define('skylark-utils/geom',[
 
 
     function marginRect(elm) {
-        var obj = this.relativeRect(elm),
-            me = this.marginExtents(elm);
+        var obj = relativeRect(elm),
+            me = marginExtents(elm);
 
         return {
             left: obj.left,
@@ -5978,8 +6348,8 @@ define('skylark-utils/geom',[
 
 
     function marginSize(elm) {
-        var obj = this.size(elm),
-            me = this.marginExtents(elm);
+        var obj = size(elm),
+            me = marginExtents(elm);
 
         return {
             width: obj.width + me.left + me.right,
@@ -5992,6 +6362,14 @@ define('skylark-utils/geom',[
      * @param {HTMLElement} elm
      */
     function paddingExtents(elm) {
+        if (noder.isWindow(elm)) {
+            return {
+                left : 0,
+                top : 0,
+                right : 0,
+                bottom : 0
+            }
+        }
         var s = getComputedStyle(elm);
         return {
             left: px(s.paddingLeft),
@@ -6309,16 +6687,458 @@ define('skylark-utils/geom',[
         width: width
     });
 
-    return skylark.geom = geom;
+    ( function() {
+        var max = Math.max,
+            abs = Math.abs,
+            rhorizontal = /left|center|right/,
+            rvertical = /top|center|bottom/,
+            roffset = /[\+\-]\d+(\.[\d]+)?%?/,
+            rposition = /^\w+/,
+            rpercent = /%$/;
+
+        function getOffsets( offsets, width, height ) {
+            return [
+                parseFloat( offsets[ 0 ] ) * ( rpercent.test( offsets[ 0 ] ) ? width / 100 : 1 ),
+                parseFloat( offsets[ 1 ] ) * ( rpercent.test( offsets[ 1 ] ) ? height / 100 : 1 )
+            ];
+        }
+
+        function parseCss( element, property ) {
+            return parseInt( styler.css( element, property ), 10 ) || 0;
+        }
+
+        function getDimensions( raw ) {
+            if ( raw.nodeType === 9 ) {
+                return {
+                    size: size(raw),
+                    offset: { top: 0, left: 0 }
+                };
+            }
+            if ( noder.isWindow( raw ) ) {
+                return {
+                    size: size(raw),
+                    offset: { 
+                        top: scrollTop(raw), 
+                        left: scrollLeft(raw) 
+                    }
+                };
+            }
+            if ( raw.preventDefault ) {
+                return {
+                    size : {
+                        width: 0,
+                        height: 0
+                    },
+                    offset: { 
+                        top: raw.pageY, 
+                        left: raw.pageX 
+                    }
+                };
+            }
+            return {
+                size: size(raw),
+                offset: pagePosition(raw)
+            };
+        }
+
+        function getScrollInfo( within ) {
+            var overflowX = within.isWindow || within.isDocument ? "" :
+                    styler.css(within.element,"overflow-x" ),
+                overflowY = within.isWindow || within.isDocument ? "" :
+                    styler.css(within.element,"overflow-y" ),
+                hasOverflowX = overflowX === "scroll" ||
+                    ( overflowX === "auto" && within.width < scrollWidth(within.element) ),
+                hasOverflowY = overflowY === "scroll" ||
+                    ( overflowY === "auto" && within.height < scrollHeight(within.element));
+            return {
+                width: hasOverflowY ? scrollbarWidth() : 0,
+                height: hasOverflowX ? scrollbarWidth() : 0
+            };
+        }
+
+        function getWithinInfo( element ) {
+            var withinElement = element || window,
+                isWindow = noder.isWindow( withinElement),
+                isDocument = !!withinElement && withinElement.nodeType === 9,
+                hasOffset = !isWindow && !isDocument,
+                msize = marginSize(withinElement);
+            return {
+                element: withinElement,
+                isWindow: isWindow,
+                isDocument: isDocument,
+                offset: hasOffset ? pagePosition(element) : { left: 0, top: 0 },
+                scrollLeft: scrollLeft(withinElement),
+                scrollTop: scrollTop(withinElement),
+                width: msize.width,
+                height: msize.height
+            };
+        }
+
+        function posit(elm,options ) {
+            // Make a copy, we don't want to modify arguments
+            options = langx.extend( {}, options );
+
+            var atOffset, targetWidth, targetHeight, targetOffset, basePosition, dimensions,
+                target = options.of,
+                within = getWithinInfo( options.within ),
+                scrollInfo = getScrollInfo( within ),
+                collision = ( options.collision || "flip" ).split( " " ),
+                offsets = {};
+
+            dimensions = getDimensions( target );
+            if ( target.preventDefault ) {
+
+                // Force left top to allow flipping
+                options.at = "left top";
+            }
+            targetWidth = dimensions.size.width;
+            targetHeight = dimensions.size.height;
+            targetOffset = dimensions.offset;
+
+            // Clone to reuse original targetOffset later
+            basePosition = langx.extend( {}, targetOffset );
+
+            // Force my and at to have valid horizontal and vertical positions
+            // if a value is missing or invalid, it will be converted to center
+            langx.each( [ "my", "at" ], function() {
+                var pos = ( options[ this ] || "" ).split( " " ),
+                    horizontalOffset,
+                    verticalOffset;
+
+                if ( pos.length === 1 ) {
+                    pos = rhorizontal.test( pos[ 0 ] ) ?
+                        pos.concat( [ "center" ] ) :
+                        rvertical.test( pos[ 0 ] ) ?
+                            [ "center" ].concat( pos ) :
+                            [ "center", "center" ];
+                }
+                pos[ 0 ] = rhorizontal.test( pos[ 0 ] ) ? pos[ 0 ] : "center";
+                pos[ 1 ] = rvertical.test( pos[ 1 ] ) ? pos[ 1 ] : "center";
+
+                // Calculate offsets
+                horizontalOffset = roffset.exec( pos[ 0 ] );
+                verticalOffset = roffset.exec( pos[ 1 ] );
+                offsets[ this ] = [
+                    horizontalOffset ? horizontalOffset[ 0 ] : 0,
+                    verticalOffset ? verticalOffset[ 0 ] : 0
+                ];
+
+                // Reduce to just the positions without the offsets
+                options[ this ] = [
+                    rposition.exec( pos[ 0 ] )[ 0 ],
+                    rposition.exec( pos[ 1 ] )[ 0 ]
+                ];
+            } );
+
+            // Normalize collision option
+            if ( collision.length === 1 ) {
+                collision[ 1 ] = collision[ 0 ];
+            }
+
+            if ( options.at[ 0 ] === "right" ) {
+                basePosition.left += targetWidth;
+            } else if ( options.at[ 0 ] === "center" ) {
+                basePosition.left += targetWidth / 2;
+            }
+
+            if ( options.at[ 1 ] === "bottom" ) {
+                basePosition.top += targetHeight;
+            } else if ( options.at[ 1 ] === "center" ) {
+                basePosition.top += targetHeight / 2;
+            }
+
+            atOffset = getOffsets( offsets.at, targetWidth, targetHeight );
+            basePosition.left += atOffset[ 0 ];
+            basePosition.top += atOffset[ 1 ];
+
+            return ( function(elem) {
+                var collisionPosition, using,
+                    msize = marginSize(elem),
+                    elemWidth = msize.width,
+                    elemHeight = msize.height,
+                    marginLeft = parseCss( elem, "marginLeft" ),
+                    marginTop = parseCss( elem, "marginTop" ),
+                    collisionWidth = elemWidth + marginLeft + parseCss( elem, "marginRight" ) +
+                        scrollInfo.width,
+                    collisionHeight = elemHeight + marginTop + parseCss( elem, "marginBottom" ) +
+                        scrollInfo.height,
+                    position = langx.extend( {}, basePosition ),
+                    myOffset = getOffsets( offsets.my, msize.width, msize.height);
+
+                if ( options.my[ 0 ] === "right" ) {
+                    position.left -= elemWidth;
+                } else if ( options.my[ 0 ] === "center" ) {
+                    position.left -= elemWidth / 2;
+                }
+
+                if ( options.my[ 1 ] === "bottom" ) {
+                    position.top -= elemHeight;
+                } else if ( options.my[ 1 ] === "center" ) {
+                    position.top -= elemHeight / 2;
+                }
+
+                position.left += myOffset[ 0 ];
+                position.top += myOffset[ 1 ];
+
+                collisionPosition = {
+                    marginLeft: marginLeft,
+                    marginTop: marginTop
+                };
+
+                langx.each( [ "left", "top" ], function( i, dir ) {
+                    if ( positions[ collision[ i ] ] ) {
+                        positions[ collision[ i ] ][ dir ]( position, {
+                            targetWidth: targetWidth,
+                            targetHeight: targetHeight,
+                            elemWidth: elemWidth,
+                            elemHeight: elemHeight,
+                            collisionPosition: collisionPosition,
+                            collisionWidth: collisionWidth,
+                            collisionHeight: collisionHeight,
+                            offset: [ atOffset[ 0 ] + myOffset[ 0 ], atOffset [ 1 ] + myOffset[ 1 ] ],
+                            my: options.my,
+                            at: options.at,
+                            within: within,
+                            elem: elem
+                        } );
+                    }
+                } );
+
+                if ( options.using ) {
+
+                    // Adds feedback as second argument to using callback, if present
+                    using = function( props ) {
+                        var left = targetOffset.left - position.left,
+                            right = left + targetWidth - elemWidth,
+                            top = targetOffset.top - position.top,
+                            bottom = top + targetHeight - elemHeight,
+                            feedback = {
+                                target: {
+                                    element: target,
+                                    left: targetOffset.left,
+                                    top: targetOffset.top,
+                                    width: targetWidth,
+                                    height: targetHeight
+                                },
+                                element: {
+                                    element: elem,
+                                    left: position.left,
+                                    top: position.top,
+                                    width: elemWidth,
+                                    height: elemHeight
+                                },
+                                horizontal: right < 0 ? "left" : left > 0 ? "right" : "center",
+                                vertical: bottom < 0 ? "top" : top > 0 ? "bottom" : "middle"
+                            };
+                        if ( targetWidth < elemWidth && abs( left + right ) < targetWidth ) {
+                            feedback.horizontal = "center";
+                        }
+                        if ( targetHeight < elemHeight && abs( top + bottom ) < targetHeight ) {
+                            feedback.vertical = "middle";
+                        }
+                        if ( max( abs( left ), abs( right ) ) > max( abs( top ), abs( bottom ) ) ) {
+                            feedback.important = "horizontal";
+                        } else {
+                            feedback.important = "vertical";
+                        }
+                        options.using.call( this, props, feedback );
+                    };
+                }
+
+                pagePosition(elem, langx.extend( position, { using: using } ));
+            })(elm);
+        }
+
+        var positions = {
+            fit: {
+                left: function( position, data ) {
+                    var within = data.within,
+                        withinOffset = within.isWindow ? within.scrollLeft : within.offset.left,
+                        outerWidth = within.width,
+                        collisionPosLeft = position.left - data.collisionPosition.marginLeft,
+                        overLeft = withinOffset - collisionPosLeft,
+                        overRight = collisionPosLeft + data.collisionWidth - outerWidth - withinOffset,
+                        newOverRight;
+
+                    // Element is wider than within
+                    if ( data.collisionWidth > outerWidth ) {
+
+                        // Element is initially over the left side of within
+                        if ( overLeft > 0 && overRight <= 0 ) {
+                            newOverRight = position.left + overLeft + data.collisionWidth - outerWidth -
+                                withinOffset;
+                            position.left += overLeft - newOverRight;
+
+                        // Element is initially over right side of within
+                        } else if ( overRight > 0 && overLeft <= 0 ) {
+                            position.left = withinOffset;
+
+                        // Element is initially over both left and right sides of within
+                        } else {
+                            if ( overLeft > overRight ) {
+                                position.left = withinOffset + outerWidth - data.collisionWidth;
+                            } else {
+                                position.left = withinOffset;
+                            }
+                        }
+
+                    // Too far left -> align with left edge
+                    } else if ( overLeft > 0 ) {
+                        position.left += overLeft;
+
+                    // Too far right -> align with right edge
+                    } else if ( overRight > 0 ) {
+                        position.left -= overRight;
+
+                    // Adjust based on position and margin
+                    } else {
+                        position.left = max( position.left - collisionPosLeft, position.left );
+                    }
+                },
+                top: function( position, data ) {
+                    var within = data.within,
+                        withinOffset = within.isWindow ? within.scrollTop : within.offset.top,
+                        outerHeight = data.within.height,
+                        collisionPosTop = position.top - data.collisionPosition.marginTop,
+                        overTop = withinOffset - collisionPosTop,
+                        overBottom = collisionPosTop + data.collisionHeight - outerHeight - withinOffset,
+                        newOverBottom;
+
+                    // Element is taller than within
+                    if ( data.collisionHeight > outerHeight ) {
+
+                        // Element is initially over the top of within
+                        if ( overTop > 0 && overBottom <= 0 ) {
+                            newOverBottom = position.top + overTop + data.collisionHeight - outerHeight -
+                                withinOffset;
+                            position.top += overTop - newOverBottom;
+
+                        // Element is initially over bottom of within
+                        } else if ( overBottom > 0 && overTop <= 0 ) {
+                            position.top = withinOffset;
+
+                        // Element is initially over both top and bottom of within
+                        } else {
+                            if ( overTop > overBottom ) {
+                                position.top = withinOffset + outerHeight - data.collisionHeight;
+                            } else {
+                                position.top = withinOffset;
+                            }
+                        }
+
+                    // Too far up -> align with top
+                    } else if ( overTop > 0 ) {
+                        position.top += overTop;
+
+                    // Too far down -> align with bottom edge
+                    } else if ( overBottom > 0 ) {
+                        position.top -= overBottom;
+
+                    // Adjust based on position and margin
+                    } else {
+                        position.top = max( position.top - collisionPosTop, position.top );
+                    }
+                }
+            },
+            flip: {
+                left: function( position, data ) {
+                    var within = data.within,
+                        withinOffset = within.offset.left + within.scrollLeft,
+                        outerWidth = within.width,
+                        offsetLeft = within.isWindow ? within.scrollLeft : within.offset.left,
+                        collisionPosLeft = position.left - data.collisionPosition.marginLeft,
+                        overLeft = collisionPosLeft - offsetLeft,
+                        overRight = collisionPosLeft + data.collisionWidth - outerWidth - offsetLeft,
+                        myOffset = data.my[ 0 ] === "left" ?
+                            -data.elemWidth :
+                            data.my[ 0 ] === "right" ?
+                                data.elemWidth :
+                                0,
+                        atOffset = data.at[ 0 ] === "left" ?
+                            data.targetWidth :
+                            data.at[ 0 ] === "right" ?
+                                -data.targetWidth :
+                                0,
+                        offset = -2 * data.offset[ 0 ],
+                        newOverRight,
+                        newOverLeft;
+
+                    if ( overLeft < 0 ) {
+                        newOverRight = position.left + myOffset + atOffset + offset + data.collisionWidth -
+                            outerWidth - withinOffset;
+                        if ( newOverRight < 0 || newOverRight < abs( overLeft ) ) {
+                            position.left += myOffset + atOffset + offset;
+                        }
+                    } else if ( overRight > 0 ) {
+                        newOverLeft = position.left - data.collisionPosition.marginLeft + myOffset +
+                            atOffset + offset - offsetLeft;
+                        if ( newOverLeft > 0 || abs( newOverLeft ) < overRight ) {
+                            position.left += myOffset + atOffset + offset;
+                        }
+                    }
+                },
+                top: function( position, data ) {
+                    var within = data.within,
+                        withinOffset = within.offset.top + within.scrollTop,
+                        outerHeight = within.height,
+                        offsetTop = within.isWindow ? within.scrollTop : within.offset.top,
+                        collisionPosTop = position.top - data.collisionPosition.marginTop,
+                        overTop = collisionPosTop - offsetTop,
+                        overBottom = collisionPosTop + data.collisionHeight - outerHeight - offsetTop,
+                        top = data.my[ 1 ] === "top",
+                        myOffset = top ?
+                            -data.elemHeight :
+                            data.my[ 1 ] === "bottom" ?
+                                data.elemHeight :
+                                0,
+                        atOffset = data.at[ 1 ] === "top" ?
+                            data.targetHeight :
+                            data.at[ 1 ] === "bottom" ?
+                                -data.targetHeight :
+                                0,
+                        offset = -2 * data.offset[ 1 ],
+                        newOverTop,
+                        newOverBottom;
+                    if ( overTop < 0 ) {
+                        newOverBottom = position.top + myOffset + atOffset + offset + data.collisionHeight -
+                            outerHeight - withinOffset;
+                        if ( newOverBottom < 0 || newOverBottom < abs( overTop ) ) {
+                            position.top += myOffset + atOffset + offset;
+                        }
+                    } else if ( overBottom > 0 ) {
+                        newOverTop = position.top - data.collisionPosition.marginTop + myOffset + atOffset +
+                            offset - offsetTop;
+                        if ( newOverTop > 0 || abs( newOverTop ) < overBottom ) {
+                            position.top += myOffset + atOffset + offset;
+                        }
+                    }
+                }
+            },
+            flipfit: {
+                left: function() {
+                    positions.flip.left.apply( this, arguments );
+                    positions.fit.left.apply( this, arguments );
+                },
+                top: function() {
+                    positions.flip.top.apply( this, arguments );
+                    positions.fit.top.apply( this, arguments );
+                }
+            }
+        };
+
+        geom.posit = posit;
+    })();
+
+    return dom.geom = geom;
 });
-define('skylark-utils/fx',[
-    "./skylark",
+define('skylark-utils-dom/fx',[
+    "./dom",
     "./langx",
     "./browser",
     "./geom",
     "./styler",
     "./eventer"
-], function(skylark, langx, browser, geom, styler, eventer) {
+], function(dom, langx, browser, geom, styler, eventer) {
     var animationName,
         animationDuration,
         animationTiming,
@@ -6366,7 +7186,8 @@ define('skylark-utils/fx',[
             endEvent,
             wrappedCallback,
             fired = false,
-            hasScrollTop = false;
+            hasScrollTop = false,
+            resetClipAuto = false;
 
         if (langx.isPlainObject(duration)) {
             ease = duration.easing;
@@ -6408,13 +7229,24 @@ define('skylark-utils/fx',[
         } else {
             // CSS transitions
             for (key in properties) {
+                var v = properties[key];
                 if (supportedTransforms.test(key)) {
-                    transforms += key + "(" + properties[key] + ") ";
+                    transforms += key + "(" + v + ") ";
                 } else {
                     if (key === "scrollTop") {
                         hasScrollTop = true;
                     }
-                    cssValues[key] = properties[key];
+                    if (key == "clip" && langx.isPlainObject(v)) {
+                        cssValues[key] = "rect(" + v.top+"px,"+ v.right +"px,"+ v.bottom +"px,"+ v.left+"px)";
+                        if (styler.css(elm,"clip") == "auto") {
+                            var size = geom.size(elm);
+                            styler.css(elm,"clip","rect("+"0px,"+ size.width +"px,"+ size.height +"px,"+"0px)");  
+                            resetClipAuto = true;
+                        }
+
+                    } else {
+                        cssValues[key] = v;
+                    }
                     cssProperties.push(langx.dasherize(key));
                 }
             }
@@ -6444,6 +7276,9 @@ define('skylark-utils/fx',[
                 eventer.off(elm, animationEnd, wrappedCallback) // triggered by setTimeout
             }
             styler.css(elm, cssReset);
+            if (resetClipAuto) {
+ //               styler.css(elm,"clip","auto");
+            }
             callback && callback.call(this);
         };
 
@@ -6481,7 +7316,7 @@ define('skylark-utils/fx',[
     }
 
     /*   
-     * Display the matched elements.
+     * Display an element.
      * @param {Object} elm  
      * @param {String} speed
      * @param {Function} callback
@@ -6501,7 +7336,7 @@ define('skylark-utils/fx',[
 
 
     /*   
-     * Hide the matched elements.
+     * Hide an element.
      * @param {Object} elm  
      * @param {String} speed
      * @param {Function} callback
@@ -6525,7 +7360,7 @@ define('skylark-utils/fx',[
     }
 
     /*   
-     * Get the current vertical position of the scroll bar for the first element in the set of matched elements or set the vertical position of the scroll bar for every matched element.
+     * Set the vertical position of the scroll bar for an element.
      * @param {Object} elm  
      * @param {Number or String} pos
      * @param {Number or String} speed
@@ -6551,7 +7386,7 @@ define('skylark-utils/fx',[
     }
 
     /*   
-     * Display or hide the matched elements.
+     * Display or hide an element.
      * @param {Object} elm  
      * @param {Number or String} speed
      * @param {Function} callback
@@ -6566,7 +7401,7 @@ define('skylark-utils/fx',[
     }
 
     /*   
-     * Adjust the opacity of the matched elements.
+     * Adjust the opacity of an element.
      * @param {Object} elm  
      * @param {Number or String} speed
      * @param {Number or String} opacity
@@ -6580,7 +7415,7 @@ define('skylark-utils/fx',[
 
 
     /*   
-     * Display the matched elements by fading them to opaque.
+     * Display an element by fading them to opaque.
      * @param {Object} elm  
      * @param {Number or String} speed
      * @param {String} easing
@@ -6601,7 +7436,7 @@ define('skylark-utils/fx',[
     }
 
     /*   
-     * Hide the matched elements by fading them to transparent.
+     * Hide an element by fading them to transparent.
      * @param {Object} elm  
      * @param {Number or String} speed
      * @param {String} easing
@@ -6610,6 +7445,7 @@ define('skylark-utils/fx',[
     function fadeOut(elm, speed, easing, callback) {
         var _elm = elm,
             complete,
+            opacity = styler.css(elm,"opacity"),
             options = {};
 
         if (langx.isPlainObject(speed)) {
@@ -6626,6 +7462,7 @@ define('skylark-utils/fx',[
             }
         }
         options.complete = function() {
+            styler.css(elm,"opacity",opacity);
             styler.hide(elm);
             if (complete) {
                 complete.call(elm);
@@ -6638,7 +7475,7 @@ define('skylark-utils/fx',[
     }
 
     /*   
-     * Display or hide the matched elements by animating their opacity.
+     * Display or hide an element by animating its opacity.
      * @param {Object} elm  
      * @param {Number or String} speed
      * @param {String} ceasing
@@ -6654,7 +7491,7 @@ define('skylark-utils/fx',[
     }
 
     /*   
-     * Display the matched elements with a sliding motion.
+     * Display an element with a sliding motion.
      * @param {Object} elm  
      * @param {Number or String} duration
      * @param {Function} callback
@@ -6712,7 +7549,7 @@ define('skylark-utils/fx',[
     };
 
     /*   
-     * Hide the matched elements with a sliding motion.
+     * Hide an element with a sliding motion.
      * @param {Object} elm  
      * @param {Number or String} duration
      * @param {Function} callback
@@ -6775,7 +7612,7 @@ define('skylark-utils/fx',[
 
 
     /*   
-     * Display or hide the matched elements with a sliding motion.
+     * Display or hide an element with a sliding motion.
      * @param {Object} elm  
      * @param {Number or String} duration
      * @param {Function} callback
@@ -6822,10 +7659,10 @@ define('skylark-utils/fx',[
         toggle: toggle
     });
 
-    return skylark.fx = fx;
+    return dom.fx = fx;
 });
-define('skylark-utils/query',[
-    "./skylark",
+define('skylark-utils-dom/query',[
+    "./dom",
     "./langx",
     "./noder",
     "./datax",
@@ -6834,7 +7671,7 @@ define('skylark-utils/query',[
     "./geom",
     "./styler",
     "./fx"
-], function(skylark, langx, noder, datax, eventer, finder, geom, styler, fx) {
+], function(dom, langx, noder, datax, eventer, finder, geom, styler, fx) {
     var some = Array.prototype.some,
         push = Array.prototype.push,
         every = Array.prototype.every,
@@ -6879,10 +7716,10 @@ define('skylark-utils/query',[
         return function() {
             var self = this,
                 params = slice.call(arguments);
-            var result = $.map(self, function(elem, idx) {
+            var result = langx.map(self, function(elem, idx) {
                 return func.apply(context, [elem].concat(params));
             });
-            return $(uniq(result));
+            return query(uniq(result));
         }
     }
 
@@ -7399,12 +8236,23 @@ define('skylark-utils/query',[
 
             scrollLeft: wrapper_value(geom.scrollLeft, geom),
 
-            position: function() {
+            position: function(options) {
                 if (!this.length) return
 
-                var elem = this[0];
+                if (options) {
+                    if (options.of && options.of.length) {
+                        options = langx.clone(options);
+                        options.of = options.of[0];
+                    }
+                    return this.each( function() {
+                        geom.posit(this,options);
+                    });
+                } else {
+                    var elem = this[0];
 
-                return geom.relativePosition(elem);
+                    return geom.relativePosition(elem);
+
+                }             
             },
 
             offsetParent: wrapper_map(geom.offsetParent, geom)
@@ -7478,7 +8326,6 @@ define('skylark-utils/query',[
         $.fn.innerWidth = wrapper_value(geom.clientWidth, geom, geom.clientWidth);
 
         $.fn.innerHeight = wrapper_value(geom.clientHeight, geom, geom.clientHeight);
-
 
         var traverseNode = noder.traverse;
 
@@ -7572,17 +8419,15 @@ define('skylark-utils/query',[
 
         $.fn.trigger = wrapper_every_act(eventer.trigger, eventer);
 
-
         ('focusin focusout focus blur load resize scroll unload click dblclick ' +
             'mousedown mouseup mousemove mouseover mouseout mouseenter mouseleave ' +
-            'change select keydown keypress keyup error').split(' ').forEach(function(event) {
+            'change select keydown keypress keyup error transitionEnd').split(' ').forEach(function(event) {
             $.fn[event] = function(data, callback) {
                 return (0 in arguments) ?
                     this.on(event, data, callback) :
                     this.trigger(event)
             }
         });
-
 
         $.fn.one = function(event, selector, data, callback) {
             if (!langx.isString(selector) && !langx.isFunction(callback)) {
@@ -7612,6 +8457,24 @@ define('skylark-utils/query',[
         $.fn.slideDown = wrapper_every_act(fx.slideDown, fx);
         $.fn.slideToggle = wrapper_every_act(fx.slideToggle, fx);
         $.fn.slideUp = wrapper_every_act(fx.slideUp, fx);
+
+        $.fn.scrollParent = function( includeHidden ) {
+            var position = this.css( "position" ),
+                excludeStaticParent = position === "absolute",
+                overflowRegex = includeHidden ? /(auto|scroll|hidden)/ : /(auto|scroll)/,
+                scrollParent = this.parents().filter( function() {
+                    var parent = $( this );
+                    if ( excludeStaticParent && parent.css( "position" ) === "static" ) {
+                        return false;
+                    }
+                    return overflowRegex.test( parent.css( "overflow" ) + parent.css( "overflow-y" ) +
+                        parent.css( "overflow-x" ) );
+                } ).eq( 0 );
+
+            return position === "fixed" || !scrollParent.length ?
+                $( this[ 0 ].ownerDocument || document ) :
+                scrollParent;
+        };
     })(query);
 
 
@@ -7712,1632 +8575,54 @@ define('skylark-utils/query',[
             return this;
         };
 
+        $.fn.replaceClass = function(newClass, oldClass) {
+            this.removeClass(oldClass);
+            this.addClass(newClass);
+            return this;
+        };
+
+        $.fn.disableSelection = ( function() {
+            var eventType = "onselectstart" in document.createElement( "div" ) ?
+                "selectstart" :
+                "mousedown";
+
+            return function() {
+                return this.on( eventType + ".ui-disableSelection", function( event ) {
+                    event.preventDefault();
+                } );
+            };
+        } )();
+
+        $.fn.enableSelection = function() {
+            return this.off( ".ui-disableSelection" );
+        };
+       
+
     })(query);
 
-
-    return skylark.query = query;
-
-});
-define('skylark-utils/dnd',[
-    "./skylark",
-    "./langx",
-    "./noder",
-    "./datax",
-    "./finder",
-    "./geom",
-    "./eventer",
-    "./styler"
-], function(skylark, langx, noder, datax, finder, geom, eventer, styler) {
-    var on = eventer.on,
-        off = eventer.off,
-        attr = datax.attr,
-        removeAttr = datax.removeAttr,
-        offset = geom.pagePosition,
-        addClass = styler.addClass,
-        height = geom.height;
-
-
-    var DndManager = langx.Evented.inherit({
-        klassName: "DndManager",
-
-        init: function() {
-
-        },
-
-        prepare: function(draggable) {
-            var e = eventer.create("preparing", {
-                dragSource: draggable.dragSource,
-                dragHandle: draggable.dragHandle
-            });
-            draggable.trigger(e);
-            draggable.dragSource = e.dragSource;
-        },
-
-        start: function(draggable, event) {
-
-            var p = geom.pagePosition(draggable.dragSource);
-            this.draggingOffsetX = parseInt(event.pageX - p.left);
-            this.draggingOffsetY = parseInt(event.pageY - p.top)
-
-            var e = eventer.create("started", {
-                elm: draggable.elm,
-                dragSource: draggable.dragSource,
-                dragHandle: draggable.dragHandle,
-                ghost: null,
-
-                transfer: {}
-            });
-
-            draggable.trigger(e);
-
-
-            this.dragging = draggable;
-
-            if (draggable.draggingClass) {
-                styler.addClass(draggable.dragSource, draggable.draggingClass);
-            }
-
-            this.draggingGhost = e.ghost;
-            if (!this.draggingGhost) {
-                this.draggingGhost = draggable.elm;
-            }
-
-            this.draggingTransfer = e.transfer;
-            if (this.draggingTransfer) {
-
-                langx.each(this.draggingTransfer, function(key, value) {
-                    event.dataTransfer.setData(key, value);
-                });
-            }
-
-            event.dataTransfer.setDragImage(this.draggingGhost, this.draggingOffsetX, this.draggingOffsetY);
-
-            event.dataTransfer.effectAllowed = "copyMove";
-
-            var e1 = eventer.create("dndStarted", {
-                elm: e.elm,
-                dragSource: e.dragSource,
-                dragHandle: e.dragHandle,
-                ghost: e.ghost,
-                transfer: e.transfer
-            });
-
-            this.trigger(e1);
-        },
-
-        over: function() {
-
-        },
-
-        end: function(dropped) {
-            var dragging = this.dragging;
-            if (dragging) {
-                if (dragging.draggingClass) {
-                    styler.removeClass(dragging.dragSource, dragging.draggingClass);
-                }
-            }
-
-            var e = eventer.create("dndEnded", {});
-            this.trigger(e);
-
-
-            this.dragging = null;
-            this.draggingTransfer = null;
-            this.draggingGhost = null;
-            this.draggingOffsetX = null;
-            this.draggingOffsetY = null;
-        }
-    });
-
-    var manager = new DndManager(),
-        draggingHeight,
-        placeholders = [];
-
-
-
-    var Draggable = langx.Evented.inherit({
-        klassName: "Draggable",
-
-        init: function(elm, params) {
-            var self = this;
-
-            self.elm = elm;
-            self.draggingClass = params.draggingClass || "dragging",
-                self.params = langx.clone(params);
-
-            ["preparing", "started", "ended", "moving"].forEach(function(eventName) {
-                if (langx.isFunction(params[eventName])) {
-                    self.on(eventName, params[eventName]);
-                }
-            });
-
-
-            eventer.on(elm, {
-                "mousedown": function(e) {
-                    var params = self.params;
-                    if (params.handle) {
-                        self.dragHandle = finder.closest(e.target, params.handle);
-                        if (!self.dragHandle) {
-                            return;
-                        }
-                    }
-                    if (params.source) {
-                        self.dragSource = finder.closest(e.target, params.source);
-                    } else {
-                        self.dragSource = self.elm;
-                    }
-                    manager.prepare(self);
-                    if (self.dragSource) {
-                        datax.attr(self.dragSource, "draggable", 'true');
-                    }
-                },
-
-                "mouseup": function(e) {
-                    if (self.dragSource) {
-                        //datax.attr(self.dragSource, "draggable", 'false');
-                        self.dragSource = null;
-                        self.dragHandle = null;
-                    }
-                },
-
-                "dragstart": function(e) {
-                    datax.attr(self.dragSource, "draggable", 'false');
-                    manager.start(self, e);
-                },
-
-                "dragend": function(e) {
-                    eventer.stop(e);
-
-                    if (!manager.dragging) {
-                        return;
-                    }
-
-                    manager.end(false);
-                }
-            });
-
-        }
-
-    });
-
-
-    var Droppable = langx.Evented.inherit({
-        klassName: "Droppable",
-
-        init: function(elm, params) {
-            var self = this,
-                draggingClass = params.draggingClass || "dragging",
-                hoverClass,
-                activeClass,
-                acceptable = true;
-
-            self.elm = elm;
-            self._params = params;
-
-            ["started", "entered", "leaved", "dropped", "overing"].forEach(function(eventName) {
-                if (langx.isFunction(params[eventName])) {
-                    self.on(eventName, params[eventName]);
-                }
-            });
-
-            eventer.on(elm, {
-                "dragover": function(e) {
-                    e.stopPropagation()
-
-                    if (!acceptable) {
-                        return
-                    }
-
-                    var e2 = eventer.create("overing", {
-                        overElm: e.target,
-                        transfer: manager.draggingTransfer,
-                        acceptable: true
-                    });
-                    self.trigger(e2);
-
-                    if (e2.acceptable) {
-                        e.preventDefault() // allow drop
-
-                        e.dataTransfer.dropEffect = "copyMove";
-                    }
-
-                },
-
-                "dragenter": function(e) {
-                    var params = self._params,
-                        elm = self.elm;
-
-                    var e2 = eventer.create("entered", {
-                        transfer: manager.draggingTransfer
-                    });
-
-                    self.trigger(e2);
-
-                    e.stopPropagation()
-
-                    if (hoverClass && acceptable) {
-                        styler.addClass(elm, hoverClass)
-                    }
-                },
-
-                "dragleave": function(e) {
-                    var params = self._params,
-                        elm = self.elm;
-                    if (!acceptable) return false
-
-                    var e2 = eventer.create("leaved", {
-                        transfer: manager.draggingTransfer
-                    });
-
-                    self.trigger(e2);
-
-                    e.stopPropagation()
-
-                    if (hoverClass && acceptable) {
-                        styler.removeClass(elm, hoverClass);
-                    }
-                },
-
-                "drop": function(e) {
-                    var params = self._params,
-                        elm = self.elm;
-
-                    eventer.stop(e); // stops the browser from redirecting.
-
-                    if (!manager.dragging) return
-
-                    // manager.dragging.elm.removeClass('dragging');
-
-                    if (hoverClass && acceptable) {
-                        styler.addClass(elm, hoverClass)
-                    }
-
-                    var e2 = eventer.create("dropped", {
-                        transfer: manager.draggingTransfer
-                    });
-
-                    self.trigger(e2);
-
-                    manager.end(true)
-                }
-            });
-
-            manager.on("dndStarted", function(e) {
-                var e2 = eventer.create("started", {
-                    transfer: manager.draggingTransfer,
-                    acceptable: false
-                });
-
-                self.trigger(e2);
-
-                acceptable = e2.acceptable;
-                hoverClass = e2.hoverClass;
-                activeClass = e2.activeClass;
-
-                if (activeClass && acceptable) {
-                    styler.addClass(elm, activeClass);
-                }
-
-            }).on("dndEnded", function(e) {
-                var e2 = eventer.create("ended", {
-                    transfer: manager.draggingTransfer,
-                    acceptable: false
-                });
-
-                self.trigger(e2);
-
-                if (hoverClass && acceptable) {
-                    styler.removeClass(elm, hoverClass);
-                }
-                if (activeClass && acceptable) {
-                    styler.removeClass(elm, activeClass);
-                }
-
-                acceptable = false;
-                activeClass = null;
-                hoverClass = null;
-            });
-
-        }
-    });
-
-
-    /*   
-     * Make the specified element be in a moveable state.
-     * @param {HTMLElement} elm  
-     * @param { } params
-     */
-    function draggable(elm, params) {
-        return new Draggable(elm, params);
-    }
-
-    /*   
-     * Make the specified element be in a droppable state.
-     * @param {HTMLElement} elm  
-     * @param { } params
-     */
-    function droppable(elm, params) {
-        return new Droppable(elm, params);
-    }
-
-
-    function dnd() {
-        return dnd;
-    }
-
-    langx.mixin(dnd, {
-        //params ： {
-        //  target : Element or string or function
-        //  handle : Element
-        //  copy : boolean
-        //  placeHolder : "div"
-        //  hoverClass : "hover"
-        //  start : function
-        //  enter : function
-        //  over : function
-        //  leave : function
-        //  drop : function
-        //  end : function
-        //
-        //
-        //}
-        draggable: draggable,
-
-        //params ： {
-        //  accept : string or function
-        //  placeHolder
-        //
-        //
-        //
-        //}
-        droppable: droppable,
-
-        manager: manager
-
-
-    });
-
-    return skylark.dnd = dnd;
-});
-define('skylark-utils/filer',[
-    "./skylark",
-    "./langx",
-    "./datax",
-    "./eventer",
-    "./styler"
-], function(skylark, langx, datax, eventer, styler) {
-    var concat = Array.prototype.concat,
-        on = eventer.on,
-        attr = eventer.attr,
-        Deferred = langx.Deferred,
-
-        fileInput,
-        fileInputForm,
-        fileSelected,
-        maxFileSize = 1 / 0;
-
-
-    var webentry = (function() {
-        function one(entry, path) {
-            var d = new Deferred(),
-                onError = function(e) {
-                    d.reject(e);
-                };
-
-            path = path || '';
-            if (entry.isFile) {
-                entry.file(function(file) {
-                    file.relativePath = path;
-                    d.resolve(file);
-                }, onError);
-            } else if (entry.isDirectory) {
-                var dirReader = entry.createReader();
-                dirReader.readEntries(function(entries) {
-                    all(
-                        entries,
-                        path + entry.name + '/'
-                    ).then(function(files) {
-                        d.resolve(files);
-                    }).catch(onError);
-                }, onError);
-            } else {
-                // Return an empy list for file system items
-                // other than files or directories:
-                d.resolve([]);
-            }
-            return d.promise;
-        }
-
-        function all(entries, path) {
-            return Deferred.all(
-                langx.map(entries, function(entry) {
-                    return one(entry, path);
-                })
-            ).then(function() {
-                return concat.apply([], arguments);
-            });
-        }
-
-        return {
-            one: one,
-            all: all
-        };
-    })();
-
-    function dataURLtoBlob(dataurl) {
-        var arr = dataurl.split(','),
-            mime = arr[0].match(/:(.*?);/)[1],
-            bstr = atob(arr[1]),
-            n = bstr.length,
-            u8arr = new Uint8Array(n);
-        while (n--) {
-            u8arr[n] = bstr.charCodeAt(n);
-        }
-        return new Blob([u8arr], { type: mime });
-    }
-    /*
-     * Make the specified element to could accept HTML5 file drag and drop.
-     * @param {HTMLElement} elm
-     * @param {PlainObject} params
-     */
-    function dropzone(elm, params) {
-        params = params || {};
-        var hoverClass = params.hoverClass || "dropzone",
-            droppedCallback = params.dropped;
-
-        var enterdCount = 0;
-        on(elm, "dragenter", function(e) {
-            if (e.dataTransfer && e.dataTransfer.types.indexOf("Files") > -1) {
-                eventer.stop(e);
-                enterdCount++;
-                styler.addClass(elm, hoverClass)
-            }
+    query.fn.plugin = function(name,options) {
+        var args = slice.call( arguments, 1 ),
+            self = this,
+            returnValue = this;
+
+        this.each(function(){
+            returnValue = plugins.instantiate.apply(self,[this,name].concat(args));
         });
-
-        on(elm, "dragover", function(e) {
-            if (e.dataTransfer && e.dataTransfer.types.indexOf("Files") > -1) {
-                eventer.stop(e);
-            }
-        });
-
-        on(elm, "dragleave", function(e) {
-            if (e.dataTransfer && e.dataTransfer.types.indexOf("Files") > -1) {
-                enterdCount--
-                if (enterdCount == 0) {
-                    styler.removeClass(elm, hoverClass);
-                }
-            }
-        });
-
-        on(elm, "drop", function(e) {
-            if (e.dataTransfer && e.dataTransfer.types.indexOf("Files") > -1) {
-                styler.removeClass(elm, hoverClass)
-                eventer.stop(e);
-                if (droppedCallback) {
-                    var items = e.dataTransfer.items;
-                    if (items && items.length && (items[0].webkitGetAsEntry ||
-                            items[0].getAsEntry)) {
-                        webentry.all(
-                            langx.map(items, function(item) {
-                                if (item.webkitGetAsEntry) {
-                                    return item.webkitGetAsEntry();
-                                }
-                                return item.getAsEntry();
-                            })
-                        ).then(droppedCallback);
-                    } else {
-                        droppedCallback(e.dataTransfer.files);
-                    }
-                }
-            }
-        });
-
-        return this;
-    }
-
-    function pastezone(elm, params) {
-        params = params || {};
-        var hoverClass = params.hoverClass || "pastezone",
-            pastedCallback = params.pasted;
-
-        on(elm, "paste", function(e) {
-            var items = e.originalEvent && e.originalEvent.clipboardData &&
-                e.originalEvent.clipboardData.items,
-                files = [];
-            if (items && items.length) {
-                langx.each(items, function(index, item) {
-                    var file = item.getAsFile && item.getAsFile();
-                    if (file) {
-                        files.push(file);
-                    }
-                });
-            }
-            if (pastedCallback && files.length) {
-                pastedCallback(files);
-            }
-        });
-
-        return this;
-    }
-    /*
-     * Make the specified element to pop-up the file selection dialog box when clicked , and read the contents the files selected from client file system by user.
-     * @param {HTMLElement} elm
-     * @param {PlainObject} params
-     */
-    function picker(elm, params) {
-        on(elm, "click", function(e) {
-            e.preventDefault();
-            select(params);
-        });
-        return this;
-    }
-
-    function select(params) {
-        params = params || {};
-        var directory = params.directory || false,
-            multiple = params.multiple || false,
-            fileSelected = params.picked;
-        if (!fileInput) {
-            var input = fileInput = document.createElement("input");
-
-            function selectFiles(pickedFiles) {
-                for (var i = pickedFiles.length; i--;) {
-                    if (pickedFiles[i].size > maxFileSize) {
-                        pickedFiles.splice(i, 1);
-                    }
-                }
-                fileSelected(pickedFiles);
-            }
-
-            input.type = "file";
-            input.style.position = "fixed",
-                input.style.left = 0,
-                input.style.top = 0,
-                input.style.opacity = .001,
-                document.body.appendChild(input);
-
-            input.onchange = function(e) {
-                var entries = e.target.webkitEntries || e.target.entries;
-
-                if (entries && entries.length) {
-                    webentry.all(entries).then(function(files) {
-                        selectFiles(files);
-                    });
-                } else {
-                    selectFiles(Array.prototype.slice.call(e.target.files));
-                }
-                // reset to "", so selecting the same file next time still trigger the change handler
-                input.value = "";
-            };
-        }
-        fileInput.multiple = multiple;
-        fileInput.webkitdirectory = directory;
-        fileInput.click();
-    }
-
-    function upload(params) {
-        var xoptions = langx.mixin({
-            contentRange: null, //
-
-            // The parameter name for the file form data (the request argument name).
-            // If undefined or empty, the name property of the file input field is
-            // used, or "files[]" if the file input name property is also empty,
-            // can be a string or an array of strings:
-            paramName: undefined,
-            // By default, each file of a selection is uploaded using an individual
-            // request for XHR type uploads. Set to false to upload file
-            // selections in one request each:
-            singleFileUploads: true,
-            // To limit the number of files uploaded with one XHR request,
-            // set the following option to an integer greater than 0:
-            limitMultiFileUploads: undefined,
-            // The following option limits the number of files uploaded with one
-            // XHR request to keep the request size under or equal to the defined
-            // limit in bytes:
-            limitMultiFileUploadSize: undefined,
-            // Multipart file uploads add a number of bytes to each uploaded file,
-            // therefore the following option adds an overhead for each file used
-            // in the limitMultiFileUploadSize configuration:
-            limitMultiFileUploadSizeOverhead: 512,
-            // Set the following option to true to issue all file upload requests
-            // in a sequential order:
-            sequentialUploads: false,
-            // To limit the number of concurrent uploads,
-            // set the following option to an integer greater than 0:
-            limitConcurrentUploads: undefined,
-            // By default, XHR file uploads are sent as multipart/form-data.
-            // The iframe transport is always using multipart/form-data.
-            // Set to false to enable non-multipart XHR uploads:
-            multipart: true,
-            // To upload large files in smaller chunks, set the following option
-            // to a preferred maximum chunk size. If set to 0, null or undefined,
-            // or the browser does not support the required Blob API, files will
-            // be uploaded as a whole.
-            maxChunkSize: undefined,
-            // When a non-multipart upload or a chunked multipart upload has been
-            // aborted, this option can be used to resume the upload by setting
-            // it to the size of the already uploaded bytes. This option is most
-            // useful when modifying the options object inside of the "add" or
-            // "send" callbacks, as the options are cloned for each file upload.
-            uploadedBytes: undefined,
-            // By default, failed (abort or error) file uploads are removed from the
-            // global progress calculation. Set the following option to false to
-            // prevent recalculating the global progress data:
-            recalculateProgress: true,
-            // Interval in milliseconds to calculate and trigger progress events:
-            progressInterval: 100,
-            // Interval in milliseconds to calculate progress bitrate:
-            bitrateInterval: 500,
-            // By default, uploads are started automatically when adding files:
-            autoUpload: true,
-
-            // Error and info messages:
-            messages: {
-                uploadedBytes: 'Uploaded bytes exceed file size'
-            },
-
-            // Translation function, gets the message key to be translated
-            // and an object with context specific data as arguments:
-            i18n: function(message, context) {
-                message = this.messages[message] || message.toString();
-                if (context) {
-                    langx.each(context, function(key, value) {
-                        message = message.replace('{' + key + '}', value);
-                    });
-                }
-                return message;
-            },
-
-            // Additional form data to be sent along with the file uploads can be set
-            // using this option, which accepts an array of objects with name and
-            // value properties, a function returning such an array, a FormData
-            // object (for XHR file uploads), or a simple object.
-            // The form of the first fileInput is given as parameter to the function:
-            formData: function(form) {
-                return form.serializeArray();
-            },
-
-            // The add callback is invoked as soon as files are added to the fileupload
-            // widget (via file input selection, drag & drop, paste or add API call).
-            // If the singleFileUploads option is enabled, this callback will be
-            // called once for each file in the selection for XHR file uploads, else
-            // once for each file selection.
-            //
-            // The upload starts when the submit method is invoked on the data parameter.
-            // The data object contains a files property holding the added files
-            // and allows you to override plugin options as well as define ajax settings.
-            //
-            // Listeners for this callback can also be bound the following way:
-            // .bind('fileuploadadd', func);
-            //
-            // data.submit() returns a Promise object and allows to attach additional
-            // handlers using jQuery's Deferred callbacks:
-            // data.submit().done(func).fail(func).always(func);
-            add: function(e, data) {
-                if (e.isDefaultPrevented()) {
-                    return false;
-                }
-                if (data.autoUpload || (data.autoUpload !== false &&
-                        $(this).fileupload('option', 'autoUpload'))) {
-                    data.process().done(function() {
-                        data.submit();
-                    });
-                }
-            },
-
-            // Other callbacks:
-
-            // Callback for the submit event of each file upload:
-            // submit: function (e, data) {}, // .bind('fileuploadsubmit', func);
-
-            // Callback for the start of each file upload request:
-            // send: function (e, data) {}, // .bind('fileuploadsend', func);
-
-            // Callback for successful uploads:
-            // done: function (e, data) {}, // .bind('fileuploaddone', func);
-
-            // Callback for failed (abort or error) uploads:
-            // fail: function (e, data) {}, // .bind('fileuploadfail', func);
-
-            // Callback for completed (success, abort or error) requests:
-            // always: function (e, data) {}, // .bind('fileuploadalways', func);
-
-            // Callback for upload progress events:
-            // progress: function (e, data) {}, // .bind('fileuploadprogress', func);
-
-            // Callback for global upload progress events:
-            // progressall: function (e, data) {}, // .bind('fileuploadprogressall', func);
-
-            // Callback for uploads start, equivalent to the global ajaxStart event:
-            // start: function (e) {}, // .bind('fileuploadstart', func);
-
-            // Callback for uploads stop, equivalent to the global ajaxStop event:
-            // stop: function (e) {}, // .bind('fileuploadstop', func);
-
-            // Callback for change events of the fileInput(s):
-            // change: function (e, data) {}, // .bind('fileuploadchange', func);
-
-            // Callback for paste events to the pasteZone(s):
-            // paste: function (e, data) {}, // .bind('fileuploadpaste', func);
-
-            // Callback for drop events of the dropZone(s):
-            // drop: function (e, data) {}, // .bind('fileuploaddrop', func);
-
-            // Callback for dragover events of the dropZone(s):
-            // dragover: function (e) {}, // .bind('fileuploaddragover', func);
-
-            // Callback for the start of each chunk upload request:
-            // chunksend: function (e, data) {}, // .bind('fileuploadchunksend', func);
-
-            // Callback for successful chunk uploads:
-            // chunkdone: function (e, data) {}, // .bind('fileuploadchunkdone', func);
-
-            // Callback for failed (abort or error) chunk uploads:
-            // chunkfail: function (e, data) {}, // .bind('fileuploadchunkfail', func);
-
-            // Callback for completed (success, abort or error) chunk upload requests:
-            // chunkalways: function (e, data) {}, // .bind('fileuploadchunkalways', func);
-
-            // The plugin options are used as settings object for the ajax calls.
-            // The following are jQuery ajax settings required for the file uploads:
-            processData: false,
-            contentType: false,
-            cache: false
-        }, params);
-
-        var blobSlice = function() {
-                var slice = Blob.prototype.slice || Blob.prototype.webkitSlice || Blob.prototype.mozSlice;
-                return slice.apply(this, arguments);
-            },
-            ajax = function(data) {
-                return langx.Xhr.request(data.url, data);
-            };
-
-        function initDataSettings(o) {
-            o.type = o.type || "POST";
-
-            if (!chunkedUpload(o, true)) {
-                if (!o.data) {
-                    initXHRData(o);
-                }
-                //initProgressListener(o);
-            }
-        }
-
-        function initXHRData(o) {
-            var that = this,
-                formData,
-                file = o.files[0],
-                // Ignore non-multipart setting if not supported:
-                multipart = o.multipart,
-                paramName = langx.type(o.paramName) === 'array' ?
-                o.paramName[0] : o.paramName;
-
-            o.headers = langx.mixin({}, o.headers);
-            if (o.contentRange) {
-                o.headers['Content-Range'] = o.contentRange;
-            }
-            if (!multipart) {
-                o.headers['Content-Disposition'] = 'attachment; filename="' +
-                    encodeURI(file.name) + '"';
-                o.contentType = file.type || 'application/octet-stream';
-                o.data = o.blob || file;
-            } else {
-                formData = new FormData();
-                if (o.blob) {
-                    formData.append(paramName, o.blob, file.name);
-                } else {
-                    langx.each(o.files, function(index, file) {
-                        // This check allows the tests to run with
-                        // dummy objects:
-                        formData.append(
-                            (langx.type(o.paramName) === 'array' &&
-                                o.paramName[index]) || paramName,
-                            file,
-                            file.uploadName || file.name
-                        );
-                    });
-                }
-                o.data = formData;
-            }
-            // Blob reference is not needed anymore, free memory:
-            o.blob = null;
-        }
-
-        function getTotal(files) {
-            var total = 0;
-            langx.each(files, function(index, file) {
-                total += file.size || 1;
-            });
-            return total;
-        }
-
-        function getUploadedBytes(jqXHR) {
-            var range = jqXHR.getResponseHeader('Range'),
-                parts = range && range.split('-'),
-                upperBytesPos = parts && parts.length > 1 &&
-                parseInt(parts[1], 10);
-            return upperBytesPos && upperBytesPos + 1;
-        }
-
-        function initProgressObject(obj) {
-            var progress = {
-                loaded: 0,
-                total: 0,
-                bitrate: 0
-            };
-            if (obj._progress) {
-                langx.mixin(obj._progress, progress);
-            } else {
-                obj._progress = progress;
-            }
-        }
-
-        function BitrateTimer() {
-            this.timestamp = ((Date.now) ? Date.now() : (new Date()).getTime());
-            this.loaded = 0;
-            this.bitrate = 0;
-            this.getBitrate = function(now, loaded, interval) {
-                var timeDiff = now - this.timestamp;
-                if (!this.bitrate || !interval || timeDiff > interval) {
-                    this.bitrate = (loaded - this.loaded) * (1000 / timeDiff) * 8;
-                    this.loaded = loaded;
-                    this.timestamp = now;
-                }
-                return this.bitrate;
-            };
-        }
-
-        function chunkedUpload(options, testOnly) {
-            options.uploadedBytes = options.uploadedBytes || 0;
-            var that = this,
-                file = options.files[0],
-                fs = file.size,
-                ub = options.uploadedBytes,
-                mcs = options.maxChunkSize || fs,
-                slice = blobSlice,
-                dfd = new Deferred(),
-                promise = dfd.promise,
-                jqXHR,
-                upload;
-            if (!(slice && (ub || mcs < fs)) ||
-                options.data) {
-                return false;
-            }
-            if (testOnly) {
-                return true;
-            }
-            if (ub >= fs) {
-                file.error = options.i18n('uploadedBytes');
-                return this._getXHRPromise(
-                    false,
-                    options.context, [null, 'error', file.error]
-                );
-            }
-            // The chunk upload method:
-            upload = function() {
-                // Clone the options object for each chunk upload:
-                var o = langx.mixin({}, options),
-                    currentLoaded = o._progress.loaded;
-                o.blob = slice.call(
-                    file,
-                    ub,
-                    ub + mcs,
-                    file.type
-                );
-                // Store the current chunk size, as the blob itself
-                // will be dereferenced after data processing:
-                o.chunkSize = o.blob.size;
-                // Expose the chunk bytes position range:
-                o.contentRange = 'bytes ' + ub + '-' +
-                    (ub + o.chunkSize - 1) + '/' + fs;
-                // Process the upload data (the blob and potential form data):
-                initXHRData(o);
-                // Add progress listeners for this chunk upload:
-                //initProgressListener(o);
-                jqXHR = $.ajax(o).done(function(result, textStatus, jqXHR) {
-                        ub = getUploadedBytes(jqXHR) ||
-                            (ub + o.chunkSize);
-                        // Create a progress event if no final progress event
-                        // with loaded equaling total has been triggered
-                        // for this chunk:
-                        if (currentLoaded + o.chunkSize - o._progress.loaded) {
-                            dfd.progress({
-                                lengthComputable: true,
-                                loaded: ub - o.uploadedBytes,
-                                total: ub - o.uploadedBytes
-                            });
-                        }
-                        options.uploadedBytes = o.uploadedBytes = ub;
-                        o.result = result;
-                        o.textStatus = textStatus;
-                        o.jqXHR = jqXHR;
-                        //that._trigger('chunkdone', null, o);
-                        //that._trigger('chunkalways', null, o);
-                        if (ub < fs) {
-                            // File upload not yet complete,
-                            // continue with the next chunk:
-                            upload();
-                        } else {
-                            dfd.resolveWith(
-                                o.context, [result, textStatus, jqXHR]
-                            );
-                        }
-                    })
-                    .fail(function(jqXHR, textStatus, errorThrown) {
-                        o.jqXHR = jqXHR;
-                        o.textStatus = textStatus;
-                        o.errorThrown = errorThrown;
-                        //that._trigger('chunkfail', null, o);
-                        //that._trigger('chunkalways', null, o);
-                        dfd.rejectWith(
-                            o.context, [jqXHR, textStatus, errorThrown]
-                        );
-                    });
-            };
-            //this._enhancePromise(promise);
-            promise.abort = function() {
-                return jqXHR.abort();
-            };
-            upload();
-            return promise;
-        }
-
-        initDataSettings(xoptions);
-
-        xoptions._bitrateTimer = new BitrateTimer();
-
-        var jqXhr = chunkedUpload(xoptions) || ajax(xoptions);
-
-        jqXhr.options = xoptions;
-
-        return jqXhr;
-    }
-
-    var filer = function() {
-        return filer;
+        return returnValue;
     };
 
-    langx.mixin(filer, {
-        dropzone: dropzone,
+    return dom.query = query;
 
-        pastezone: pastezone,
-
-        picker: picker,
-
-        select: select,
-
-        upload: upload,
-
-        readFile: function(file, params) {
-            params = params || {};
-            var d = new Deferred,
-                reader = new FileReader();
-
-            reader.onload = function(evt) {
-                d.resolve(evt.target.result);
-            };
-            reader.onerror = function(e) {
-                var code = e.target.error.code;
-                if (code === 2) {
-                    alert('please don\'t open this page using protocol fill:///');
-                } else {
-                    alert('error code: ' + code);
-                }
-            };
-
-            if (params.asArrayBuffer) {
-                reader.readAsArrayBuffer(file);
-            } else if (params.asDataUrl) {
-                reader.readAsDataURL(file);
-            } else if (params.asText) {
-                reader.readAsText(file);
-            } else {
-                reader.readAsArrayBuffer(file);
-            }
-
-            return d.promise;
-        },
-
-        writeFile: function(data, name) {
-            if (window.navigator.msSaveBlob) {
-                if (langx.isString(data)) {
-                    data = dataURItoBlob(data);
-                }
-                window.navigator.msSaveBlob(data, name);
-            } else {
-                var a = document.createElement('a');
-                if (data instanceof Blob) {
-                    data = langx.URL.createObjectURL(data);
-                }
-                a.href = data;
-                a.setAttribute('download', name || 'noname');
-                a.dispatchEvent(new CustomEvent('click'));
-            }
-        }
-
-    });
-
-    return skylark.filer = filer;
 });
-define('skylark-utils/velm',[
-    "./skylark",
-    "./langx",
-    "./datax",
-    "./dnd",
-    "./eventer",
-    "./filer",
-    "./finder",
-    "./fx",
-    "./geom",
-    "./noder",
-    "./styler"
-], function(skylark, langx, datax, dnd, eventer, filer, finder, fx, geom, noder, styler) {
-    var map = Array.prototype.map,
-        slice = Array.prototype.slice;
-    /*
-     * VisualElement is a skylark class type wrapping a visule dom node,provides a number of prototype methods and supports chain calls.
-     */
-    var VisualElement = langx.klass({
-        klassName: "VisualElement",
-
-        "init": function(node) {
-            if (langx.isString(node)) {
-                node = document.getElementById(node);
-            }
-            this.domNode = node;
-        }
-    });
-    /*
-     * the VisualElement object wrapping document.body
-     */
-    var root = new VisualElement(document.body),
-        velm = function(node) {
-            if (node) {
-                return new VisualElement(node);
-            } else {
-                return root;
-            }
-        };
-    /*
-     * Extend VisualElement prototype with wrapping the specified methods.
-     * @param {ArrayLike} fn
-     * @param {Object} context
-     */
-    function _delegator(fn, context) {
-        return function() {
-            var self = this,
-                elem = self.domNode,
-                ret = fn.apply(context, [elem].concat(slice.call(arguments)));
-
-            if (ret) {
-                if (ret === context) {
-                    return self;
-                } else {
-                    if (ret instanceof HTMLElement) {
-                        ret = new VisualElement(ret);
-                    } else if (langx.isArrayLike(ret)) {
-                        ret = map.call(ret, function(el) {
-                            if (el instanceof HTMLElement) {
-                                return new VisualElement(ret);
-                            } else {
-                                return el;
-                            }
-                        })
-                    }
-                }
-            }
-            return ret;
-        };
-    }
-
-    langx.mixin(velm, {
-        batch: function(nodes, action, args) {
-            nodes.forEach(function(node) {
-                var elm = (node instanceof VisualElement) ? node : velm(node);
-                elm[action].apply(elm, args);
-            });
-
-            return this;
-        },
-
-        root: new VisualElement(document.body),
-
-        VisualElement: VisualElement,
-
-        partial: function(name, fn) {
-            var props = {};
-
-            props[name] = fn;
-
-            VisualElement.partial(props);
-        },
-
-        delegate: function(names, context) {
-            var props = {};
-
-            names.forEach(function(name) {
-                props[name] = _delegator(context[name], context);
-            });
-
-            VisualElement.partial(props);
-        }
-    });
-
-    // from ./datax
-    velm.delegate([
-        "attr",
-        "data",
-        "prop",
-        "removeAttr",
-        "removeData",
-        "text",
-        "val"
-    ], datax);
-
-    // from ./dnd
-    velm.delegate([
-        "draggable",
-        "droppable"
-    ], dnd);
-
-
-    // from ./eventer
-    velm.delegate([
-        "off",
-        "on",
-        "one",
-        "shortcuts",
-        "trigger"
-    ], eventer);
-
-    // from ./filer
-    velm.delegate([
-        "picker",
-        "dropzone"
-    ], filer);
-
-    // from ./finder
-    velm.delegate([
-        "ancestor",
-        "ancestors",
-        "children",
-        "descendant",
-        "find",
-        "findAll",
-        "firstChild",
-        "lastChild",
-        "matches",
-        "nextSibling",
-        "nextSiblings",
-        "parent",
-        "previousSibling",
-        "previousSiblings",
-        "siblings"
-    ], finder);
-
-    /*
-     * find a dom element matched by the specified selector.
-     * @param {String} selector
-     */
-    velm.find = function(selector) {
-        if (selector === "body") {
-            return this.root;
-        } else {
-            return this.root.descendant(selector);
-        }
-    };
-
-    // from ./fx
-    velm.delegate([
-        "animate",
-        "fadeIn",
-        "fadeOut",
-        "fadeTo",
-        "fadeToggle",
-        "hide",
-        "scrollToTop",
-        "show",
-        "toggle"
-    ], fx);
-
-
-    // from ./geom
-    velm.delegate([
-        "borderExtents",
-        "boundingPosition",
-        "boundingRect",
-        "clientHeight",
-        "clientSize",
-        "clientWidth",
-        "contentRect",
-        "height",
-        "marginExtents",
-        "offsetParent",
-        "paddingExtents",
-        "pagePosition",
-        "pageRect",
-        "relativePosition",
-        "relativeRect",
-        "scrollIntoView",
-        "scrollLeft",
-        "scrollTop",
-        "size",
-        "width"
-    ], geom);
-
-    // from ./mover
-    velm.delegate([
-        "draggable",
-        "droppable"
-    ], dnd);
-
-
-    // from ./noder
-    velm.delegate([
-        "after",
-        "append",
-        "before",
-        "clone",
-        "contains",
-        "contents",
-        "empty",
-        "html",
-        "isChildOf",
-        "ownerDoc",
-        "prepend",
-        "remove",
-        "removeChild",
-        "replace",
-        "reverse",
-        "throb",
-        "traverse",
-        "wrapper",
-        "wrapperInner",
-        "unwrap"
-    ], noder);
-
-    // from ./styler
-    velm.delegate([
-        "addClass",
-        "className",
-        "css",
-        "hasClass",
-        "hide",
-        "isInvisible",
-        "removeClass",
-        "show",
-        "toggleClass"
-    ], styler);
-
-    // properties
-
-    var properties = [ 'position', 'left', 'top', 'right', 'bottom', 'width', 'height', 'border', 'borderLeft',
-    'borderTop', 'borderRight', 'borderBottom', 'borderColor', 'display', 'overflow', 'margin', 'marginLeft', 'marginTop', 'marginRight', 'marginBottom', 'padding', 'paddingLeft', 'paddingTop', 'paddingRight', 'paddingBottom', 'color',
-    'background', 'backgroundColor', 'opacity', 'fontSize', 'fontWeight', 'textAlign', 'textDecoration', 'textTransform', 'cursor', 'zIndex' ];
-
-    properties.forEach( function ( property ) {
-
-        var method = property;
-
-        Velm.prototype[ method ] = function (value) {
-
-            this.css( property, value );
-
-            return this;
-
-        };
-
-    });
-
-    // events
-    var events = [ 'keyUp', 'keyDown', 'mouseOver', 'mouseOut', 'click', 'dblClick', 'change' ];
-
-    events.forEach( function ( event ) {
-
-        var method = event;
-
-        Velm.prototype[ method ] = function ( callback ) {
-
-            this.on( event.toLowerCase(), callback);
-
-            return this;
-        };
-
-    });
-
-    return skylark.velm = velm;
-});
-define('skylark-utils/widgets',[
-    "./skylark",
-    "./langx",
-    "./noder",
-    "./datax",
-    "./styler",
-    "./geom",
-    "./eventer",
-    "./query",
-    "./velm"
-], function(skylark,langx,noder, datax, styler, geom, eventer,query,velm) {
-	// Cached regex to split keys for `delegate`.
-	var delegateEventSplitter = /^(\S+)\s*(.*)$/,
-		slice = Array.prototype.slice;
-
-
-	function bridge( name, object ) {
-		var fullName = object.prototype.widgetFullName || name,
-			fn = {};
-
-		function _delegate (isQuery) {
-
-		}
-
-		fn[name] = function( options ) {
-			var isMethodCall = typeof options === "string";
-			var args = slice.call( arguments, 1 );
-			var returnValue = this;
-
-			if ( isMethodCall ) {
-
-				// If this is an empty collection, we need to have the instance method
-				// return undefined instead of the jQuery instance
-				if ( !this.length && options === "instance" ) {
-					returnValue = undefined;
-				} else {
-					this.each( function() {
-						var methodValue;
-						var instance = datax.data( this, fullName );
-
-						if ( options === "instance" ) {
-							returnValue = instance;
-							return false;
-						}
-
-						if ( !instance ) {
-							return $.error( "cannot call methods on " + name +
-								" prior to initialization; " +
-								"attempted to call method '" + options + "'" );
-						}
-
-						if ( !langx.isFunction( instance[ options ] ) || options.charAt( 0 ) === "_" ) {
-							return $.error( "no such method '" + options + "' for " + name +
-								" widget instance" );
-						}
-
-						methodValue = instance[ options ].apply( instance, args );
-
-						if ( methodValue !== instance && methodValue !== undefined ) {
-							returnValue = methodValue && methodValue.jquery ?
-								returnValue.pushStack( methodValue.get() ) :
-								methodValue;
-							return false;
-						}
-					} );
-				}
-			} else {
-
-				// Allow multiple hashes to be passed on init
-				if ( args.length ) {
-					options = $.widget.extend.apply( null, [ options ].concat( args ) );
-				}
-
-				this.each( function() {
-					var instance = datax.data( this, fullName );
-					if ( instance ) {
-						instance.option( options || {} );
-						if ( instance._init ) {
-							instance._init();
-						}
-					} else {
-						datax.data( this, fullName, new object( options, this ) );
-					}
-				} );
-			}
-
-			return returnValue;
-		};
-	};
-
-	function widgets() {
-	    return widgets;
-	}
-
-	var Widget = langx.Evented.inherit({
-	    init :function(el,options) {
-	    	//for supporting init(options,el)
-	        if (langx.isHtmlNode(options)) {
-	        	var _t = el,
-	        		options = el;
-	            el = options;
-	        }
-	        if (langx.isHtmlNode(el)) { 
-	        	this.el = el;
-	    	} else {
-	    		this.el = null;
-	    	}
-	        if (options) {
-	            langx.mixin(this,options);
-	        }
-	        if (!this.cid) {
-	            this.cid = langx.uniqueId('w');
-	        }
-	        this._ensureElement();
-	    },
-
-	    // The default `tagName` of a View's element is `"div"`.
-	    tagName: 'div',
-
-	    // query delegate for element lookup, scoped to DOM elements within the
-	    // current view. This should be preferred to global lookups where possible.
-	    $: function(selector) {
-	      return this.$el.find(selector);
-	    },
-
-	    // **render** is the core function that your view should override, in order
-	    // to populate its element (`this.el`), with the appropriate HTML. The
-	    // convention is for **render** to always return `this`.
-	    render: function() {
-	      return this;
-	    },
-
-	    // Remove this view by taking the element out of the DOM, and removing any
-	    // applicable Backbone.Events listeners.
-	    remove: function() {
-	      this._removeElement();
-	      this.unlistenTo();
-	      return this;
-	    },
-
-	    // Remove this view's element from the document and all event listeners
-	    // attached to it. Exposed for subclasses using an alternative DOM
-	    // manipulation API.
-	    _removeElement: function() {
-	      this.$el.remove();
-	    },
-
-	    // Change the view's element (`this.el` property) and re-delegate the
-	    // view's events on the new element.
-	    setElement: function(element) {
-	      this.undelegateEvents();
-	      this._setElement(element);
-	      this.delegateEvents();
-	      return this;
-	    },
-
-	    // Creates the `this.el` and `this.$el` references for this view using the
-	    // given `el`. `el` can be a CSS selector or an HTML string, a jQuery
-	    // context or an element. Subclasses can override this to utilize an
-	    // alternative DOM manipulation API and are only required to set the
-	    // `this.el` property.
-	    _setElement: function(el) {
-	      this.$el = widgets.$(el);
-	      this.el = this.$el[0];
-	    },
-
-	    // Set callbacks, where `this.events` is a hash of
-	    //
-	    // *{"event selector": "callback"}*
-	    //
-	    //     {
-	    //       'mousedown .title':  'edit',
-	    //       'click .button':     'save',
-	    //       'click .open':       function(e) { ... }
-	    //     }
-	    //
-	    // pairs. Callbacks will be bound to the view, with `this` set properly.
-	    // Uses event delegation for efficiency.
-	    // Omitting the selector binds the event to `this.el`.
-	    delegateEvents: function(events) {
-	      events || (events = langx.result(this, 'events'));
-	      if (!events) return this;
-	      this.undelegateEvents();
-	      for (var key in events) {
-	        var method = events[key];
-	        if (!langx.isFunction(method)) method = this[method];
-	        if (!method) continue;
-	        var match = key.match(delegateEventSplitter);
-	        this.delegate(match[1], match[2], langx.proxy(method, this));
-	      }
-	      return this;
-	    },
-
-	    // Add a single event listener to the view's element (or a child element
-	    // using `selector`). This only works for delegate-able events: not `focus`,
-	    // `blur`, and not `change`, `submit`, and `reset` in Internet Explorer.
-	    delegate: function(eventName, selector, listener) {
-	      this.$el.on(eventName + '.delegateEvents' + this.uid, selector, listener);
-	      return this;
-	    },
-
-	    // Clears all callbacks previously bound to the view by `delegateEvents`.
-	    // You usually don't need to use this, but may wish to if you have multiple
-	    // Backbone views attached to the same DOM element.
-	    undelegateEvents: function() {
-	      if (this.$el) this.$el.off('.delegateEvents' + this.uid);
-	      return this;
-	    },
-
-	    // A finer-grained `undelegateEvents` for removing a single delegated event.
-	    // `selector` and `listener` are both optional.
-	    undelegate: function(eventName, selector, listener) {
-	      this.$el.off(eventName + '.delegateEvents' + this.uid, selector, listener);
-	      return this;
-	    },
-
-	    // Produces a DOM element to be assigned to your view. Exposed for
-	    // subclasses using an alternative DOM manipulation API.
-	    _createElement: function(tagName,attrs) {
-	      return noder.createElement(tagName,attrs);
-	    },
-
-	    // Ensure that the View has a DOM element to render into.
-	    // If `this.el` is a string, pass it through `$()`, take the first
-	    // matching element, and re-assign it to `el`. Otherwise, create
-	    // an element from the `id`, `className` and `tagName` properties.
-	    _ensureElement: function() {
-	      if (!this.el) {
-	        var attrs = langx.mixin({}, langx.result(this, 'attributes'));
-	        if (this.id) attrs.id = langx.result(this, 'id');
-	        if (this.className) attrs['class'] = langx.result(this, 'className');
-	        this.setElement(this._createElement(langx.result(this, 'tagName'),attrs));
-	        this._setAttributes(attrs);
-	      } else {
-	        this.setElement(langx.result(this, 'el'));
-	      }
-	    },
-
-	    // Set attributes from a hash on this view's element.  Exposed for
-	    // subclasses using an alternative DOM manipulation API.
-	    _setAttributes: function(attributes) {
-	      this.$el.attr(attributes);
-	    },
-
-	    // Translation function, gets the message key to be translated
-	    // and an object with context specific data as arguments:
-	    i18n: function (message, context) {
-	        message = (this.messages && this.messages[message]) || message.toString();
-	        if (context) {
-	            langx.each(context, function (key, value) {
-	                message = message.replace('{' + key + '}', value);
-	            });
-	        }
-	        return message;
-	    },
-
-		});
-
-	function defineWidgetClass(name,base,prototype) {
-
-	};
-
-	langx.mixin(widgets, {
-		$ : query,
-
-		define : defineWidgetClass,
-		Widget : Widget
-	});
-
-
-	return skylark.widgets = widgets;
-});
-
-/**
- * skylark-bootstrap3 - The skylark standard widget tookit
- * @author Hudaokeji, Inc.
- * @version v0.9.2
- * @link https://github.com/skylarkui/skylark-bootstrap3/
- * @license MIT
- */
 define('skylark-bootstrap3/bs3',[
-  "skylark-utils/skylark",
-  "skylark-utils/langx",
-  "skylark-utils/browser",
-  "skylark-utils/eventer",
-  "skylark-utils/noder",
-  "skylark-utils/geom",
-  "skylark-utils/query",
-  "skylark-utils/widgets"
-],function(skylark,langx,browser,eventer,noder,geom,$,widgets){
+  "skylark-utils-dom/skylark",
+  "skylark-langx/langx",
+  "skylark-utils-dom/browser",
+  "skylark-utils-dom/eventer",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/geom",
+  "skylark-utils-dom/query"
+],function(skylark,langx,browser,eventer,noder,geom,$){
 	var ui = skylark.ui = skylark.ui || {}, 
 		bs3 = ui.bs3 = {};
 
@@ -9403,7 +8688,7 @@ define('skylark-bootstrap3/bs3',[
 
 /*---------------------------------------------------------------------------------*/
 
-	var WidgetBase = widgets.Widget.inherit({
+	var WidgetBase = langx.Evented.inherit({
         klassName: "WidgetBase",
     });
 
@@ -9415,23 +8700,15 @@ define('skylark-bootstrap3/bs3',[
 	return bs3;
 });
 
-/**
- * skylark-bootstrap3 - The skylark standard widget tookit
- * @author Hudaokeji, Inc.
- * @version v0.9.2
- * @link https://github.com/skylarkui/skylark-bootstrap3/
- * @license MIT
- */
 define('skylark-bootstrap3/affix',[
-  "skylark-utils/langx",
-  "skylark-utils/browser",
-  "skylark-utils/eventer",
-  "skylark-utils/noder",
-  "skylark-utils/geom",
-  "skylark-utils/velm",
-  "skylark-utils/query",
+  "skylark-langx/langx",
+  "skylark-utils-dom/browser",
+  "skylark-utils-dom/eventer",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/geom",
+  "skylark-utils-dom/query",
   "./bs3"
-],function(langx,browser,eventer,noder,geom,velm,$,bs3){
+],function(langx,browser,eventer,noder,geom,$,bs3){
 
 
 /* ========================================================================
@@ -9586,90 +8863,11 @@ define('skylark-bootstrap3/affix',[
 });
 
 define('skylark-bs-swt/sbswt',[
-  "skylark-utils/skylark",
-  "skylark-utils/langx",
-  "skylark-utils/browser",
-  "skylark-utils/eventer",
-  "skylark-utils/noder",
-  "skylark-utils/geom",
-  "skylark-utils/query",
-  "skylark-utils/widgets"
-],function(skylark,langx,browser,eventer,noder,geom,$,widgets){
-	var ui = skylark.ui = skylark.ui || {}, 
-		sbswt = ui.sbswt = {};
+  "skylark-langx/skylark"
+],function(skylark){
 
-/*---------------------------------------------------------------------------------*/
-	/*
-	 * Fuel UX utilities.js
-	 * https://github.com/ExactTarget/fuelux
-	 *
-	 * Copyright (c) 2014 ExactTarget
-	 * Licensed under the BSD New license.
-	 */
-	var CONST = {
-		BACKSPACE_KEYCODE: 8,
-		COMMA_KEYCODE: 188, // `,` & `<`
-		DELETE_KEYCODE: 46,
-		DOWN_ARROW_KEYCODE: 40,
-		ENTER_KEYCODE: 13,
-		TAB_KEYCODE: 9,
-		UP_ARROW_KEYCODE: 38
-	};
+	return skylark.sbswt = {};
 
-	var isShiftHeld = function isShiftHeld (e) { return e.shiftKey === true; };
-
-	var isKey = function isKey (keyCode) {
-		return function compareKeycodes (e) {
-			return e.keyCode === keyCode;
-		};
-	};
-
-	var isBackspaceKey = isKey(CONST.BACKSPACE_KEYCODE);
-	var isDeleteKey = isKey(CONST.DELETE_KEYCODE);
-	var isTabKey = isKey(CONST.TAB_KEYCODE);
-	var isUpArrow = isKey(CONST.UP_ARROW_KEYCODE);
-	var isDownArrow = isKey(CONST.DOWN_ARROW_KEYCODE);
-
-	var ENCODED_REGEX = /&[^\s]*;/;
-	/*
-	 * to prevent double encoding decodes content in loop until content is encoding free
-	 */
-	var cleanInput = function cleanInput (questionableMarkup) {
-		// check for encoding and decode
-		while (ENCODED_REGEX.test(questionableMarkup)) {
-			questionableMarkup = $('<i>').html(questionableMarkup).text();
-		}
-
-		// string completely decoded now encode it
-		return $('<i>').text(questionableMarkup).html();
-	};
-
-
-
-
-	langx.mixin(sbswt, {
-		CONST: CONST,
-		cleanInput: cleanInput,
-		isBackspaceKey: isBackspaceKey,
-		isDeleteKey: isDeleteKey,
-		isShiftHeld: isShiftHeld,
-		isTabKey: isTabKey,
-		isUpArrow: isUpArrow,
-		isDownArrow: isDownArrow
-	});
-
-/*---------------------------------------------------------------------------------*/
-
-	var WidgetBase = widgets.Widget.inherit({
-        klassName: "WidgetBase",
-    });
-
-
-	langx.mixin(sbswt, {
-		WidgetBase : WidgetBase
-	});
-
-	return sbswt;
 });
 
 define('skylark-bs-swt/affix',[
@@ -9682,23 +8880,15 @@ define('skylark-bs-swt/affix',[
   return affix;
 });
 
-/**
- * skylark-bootstrap3 - The skylark standard widget tookit
- * @author Hudaokeji, Inc.
- * @version v0.9.2
- * @link https://github.com/skylarkui/skylark-bootstrap3/
- * @license MIT
- */
 define('skylark-bootstrap3/alert',[
-  "skylark-utils/langx",
-  "skylark-utils/browser",
-  "skylark-utils/eventer",
-  "skylark-utils/noder",
-  "skylark-utils/geom",
-  "skylark-utils/velm",
-  "skylark-utils/query",
+  "skylark-langx/langx",
+  "skylark-utils-dom/browser",
+  "skylark-utils-dom/eventer",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/geom",
+  "skylark-utils-dom/query",
   "./bs3"
-],function(langx,browser,eventer,noder,geom,velm,$,bs3){
+],function(langx,browser,eventer,noder,geom,$,bs3){
 
 /* ========================================================================
  * Bootstrap: alert.js v3.3.7
@@ -9754,7 +8944,7 @@ define('skylark-bootstrap3/alert',[
 
       if (browser.support.transition) {
         if ($parent.hasClass('fade') ) {
-          $parent.one('bsTransitionEnd', removeElement)
+          $parent.one('transitionEnd', removeElement)
           .emulateTransitionEnd(Alert.TRANSITION_DURATION);
         } else {
           removeElement();
@@ -9815,23 +9005,15 @@ define('skylark-bs-swt/alert',[
   return alert;
 });
 
-/**
- * skylark-bootstrap3 - The skylark standard widget tookit
- * @author Hudaokeji, Inc.
- * @version v0.9.2
- * @link https://github.com/skylarkui/skylark-bootstrap3/
- * @license MIT
- */
 define('skylark-bootstrap3/button',[
-  "skylark-utils/langx",
-  "skylark-utils/browser",
-  "skylark-utils/eventer",
-  "skylark-utils/noder",
-  "skylark-utils/geom",
-  "skylark-utils/velm",
-  "skylark-utils/query",
+  "skylark-langx/langx",
+  "skylark-utils-dom/browser",
+  "skylark-utils-dom/eventer",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/geom",
+  "skylark-utils-dom/query",
   "./bs3"
-],function(langx,browser,eventer,noder,geom,velm,$,bs3){
+],function(langx,browser,eventer,noder,geom,$,bs3){
 
 /* ========================================================================
  * Bootstrap: button.js v3.3.7
@@ -9978,23 +9160,525 @@ define('skylark-bs-swt/button',[
   return button;
 });
 
-/**
- * skylark-bootstrap3 - The skylark standard widget tookit
- * @author Hudaokeji, Inc.
- * @version v0.9.2
- * @link https://github.com/skylarkui/skylark-bootstrap3/
- * @license MIT
- */
+define('skylark-utils-dom/elmx',[
+    "./dom",
+    "./langx",
+    "./datax",
+    "./eventer",
+    "./finder",
+    "./fx",
+    "./geom",
+    "./noder",
+    "./styler",
+    "./query"
+], function(dom, langx, datax, eventer, finder, fx, geom, noder, styler,$) {
+    var map = Array.prototype.map,
+        slice = Array.prototype.slice;
+    /*
+     * VisualElement is a skylark class type wrapping a visule dom node,
+     * provides a number of prototype methods and supports chain calls.
+     */
+    var VisualElement = langx.klass({
+        klassName: "VisualElement",
+
+        "init": function(node) {
+            if (langx.isString(node)) {
+                node = document.getElementById(node);
+            }
+            this.domNode = node;
+        }
+    });
+
+    VisualElement.prototype.$ = VisualElement.prototype.query = function(selector) {
+        return $(selector,this.domNode);
+    };
+
+    /*
+     * the VisualElement object wrapping document.body
+     */
+    var root = new VisualElement(document.body),
+        elmx = function(node) {
+            if (node) {
+                return new VisualElement(node);
+            } else {
+                return root;
+            }
+        };
+    /*
+     * Extend VisualElement prototype with wrapping the specified methods.
+     * @param {ArrayLike} fn
+     * @param {Object} context
+     */
+    function _delegator(fn, context) {
+        return function() {
+            var self = this,
+                elem = self.domNode,
+                ret = fn.apply(context, [elem].concat(slice.call(arguments)));
+
+            if (ret) {
+                if (ret === context) {
+                    return self;
+                } else {
+                    if (ret instanceof HTMLElement) {
+                        ret = new VisualElement(ret);
+                    } else if (langx.isArrayLike(ret)) {
+                        ret = map.call(ret, function(el) {
+                            if (el instanceof HTMLElement) {
+                                return new VisualElement(el);
+                            } else {
+                                return el;
+                            }
+                        })
+                    }
+                }
+            }
+            return ret;
+        };
+    }
+
+    langx.mixin(elmx, {
+        batch: function(nodes, action, args) {
+            nodes.forEach(function(node) {
+                var elm = (node instanceof VisualElement) ? node : elmx(node);
+                elm[action].apply(elm, args);
+            });
+
+            return this;
+        },
+
+        root: new VisualElement(document.body),
+
+        VisualElement: VisualElement,
+
+        partial: function(name, fn) {
+            var props = {};
+
+            props[name] = fn;
+
+            VisualElement.partial(props);
+        },
+
+        delegate: function(names, context) {
+            var props = {};
+
+            names.forEach(function(name) {
+                props[name] = _delegator(context[name], context);
+            });
+
+            VisualElement.partial(props);
+        }
+    });
+
+    // from ./datax
+    elmx.delegate([
+        "attr",
+        "data",
+        "prop",
+        "removeAttr",
+        "removeData",
+        "text",
+        "val"
+    ], datax);
+
+    // from ./eventer
+    elmx.delegate([
+        "off",
+        "on",
+        "one",
+        "shortcuts",
+        "trigger"
+    ], eventer);
+
+    // from ./finder
+    elmx.delegate([
+        "ancestor",
+        "ancestors",
+        "children",
+        "descendant",
+        "find",
+        "findAll",
+        "firstChild",
+        "lastChild",
+        "matches",
+        "nextSibling",
+        "nextSiblings",
+        "parent",
+        "previousSibling",
+        "previousSiblings",
+        "siblings"
+    ], finder);
+
+    /*
+     * find a dom element matched by the specified selector.
+     * @param {String} selector
+     */
+    elmx.find = function(selector) {
+        if (selector === "body") {
+            return this.root;
+        } else {
+            return this.root.descendant(selector);
+        }
+    };
+
+    // from ./fx
+    elmx.delegate([
+        "animate",
+        "fadeIn",
+        "fadeOut",
+        "fadeTo",
+        "fadeToggle",
+        "hide",
+        "scrollToTop",
+        "show",
+        "toggle"
+    ], fx);
+
+
+    // from ./geom
+    elmx.delegate([
+        "borderExtents",
+        "boundingPosition",
+        "boundingRect",
+        "clientHeight",
+        "clientSize",
+        "clientWidth",
+        "contentRect",
+        "height",
+        "marginExtents",
+        "offsetParent",
+        "paddingExtents",
+        "pagePosition",
+        "pageRect",
+        "relativePosition",
+        "relativeRect",
+        "scrollIntoView",
+        "scrollLeft",
+        "scrollTop",
+        "size",
+        "width"
+    ], geom);
+
+    // from ./noder
+    elmx.delegate([
+        "after",
+        "append",
+        "before",
+        "clone",
+        "contains",
+        "contents",
+        "empty",
+        "html",
+        "isChildOf",
+        "ownerDoc",
+        "prepend",
+        "remove",
+        "removeChild",
+        "replace",
+        "reverse",
+        "throb",
+        "traverse",
+        "wrapper",
+        "wrapperInner",
+        "unwrap"
+    ], noder);
+
+    // from ./styler
+    elmx.delegate([
+        "addClass",
+        "className",
+        "css",
+        "hasClass",
+        "hide",
+        "isInvisible",
+        "removeClass",
+        "show",
+        "toggleClass"
+    ], styler);
+
+    // properties
+
+    var properties = [ 'position', 'left', 'top', 'right', 'bottom', 'width', 'height', 'border', 'borderLeft',
+    'borderTop', 'borderRight', 'borderBottom', 'borderColor', 'display', 'overflow', 'margin', 'marginLeft', 'marginTop', 'marginRight', 'marginBottom', 'padding', 'paddingLeft', 'paddingTop', 'paddingRight', 'paddingBottom', 'color',
+    'background', 'backgroundColor', 'opacity', 'fontSize', 'fontWeight', 'textAlign', 'textDecoration', 'textTransform', 'cursor', 'zIndex' ];
+
+    properties.forEach( function ( property ) {
+
+        var method = property;
+
+        VisualElement.prototype[method ] = function (value) {
+
+            this.css( property, value );
+
+            return this;
+
+        };
+
+    });
+
+    // events
+    var events = [ 'keyUp', 'keyDown', 'mouseOver', 'mouseOut', 'click', 'dblClick', 'change' ];
+
+    events.forEach( function ( event ) {
+
+        var method = event;
+
+        VisualElement.prototype[method ] = function ( callback ) {
+
+            this.on( event.toLowerCase(), callback);
+
+            return this;
+        };
+
+    });
+
+
+    return dom.elmx = elmx;
+});
+define('skylark-utils-dom/plugins',[
+    "./dom",
+    "./langx",
+    "./noder",
+    "./datax",
+    "./eventer",
+    "./finder",
+    "./geom",
+    "./styler",
+    "./fx",
+    "./query",
+    "./elmx"
+], function(dom, langx, noder, datax, eventer, finder, geom, styler, fx, $, elmx) {
+    "use strict";
+
+    var slice = Array.prototype.slice,
+        concat = Array.prototype.concat,
+        pluginKlasses = {};
+
+
+    /*
+     * Register a plugin type
+     */
+    function register( pluginKlass,shortcut) {
+        var name = pluginKlass.prototype.pluginName;
+        
+        pluginKlasses[name] = pluginKlass;
+
+        if (shortcut) {
+            elmx.partial(shortcut,$.fn[shortcut] = function(options) {
+                var args = slice.call(arguments,0);
+                args.unshift(name);
+                return this.plugin.apply(this,args);
+            });
+        }
+    }
+
+    /*
+     * Create or get a plugin instance assocated with the element,
+     * also you can execute the plugin method directory;
+     */
+    function instantiate(elm,pluginName,options) {
+
+        var pluginInstance = datax.data( elm, pluginName );
+
+        if (options === "instance") {
+            return pluginInstance;
+        }
+
+        var isMethodCall = typeof options === "string",
+            args = slice.call( arguments, 2 ),
+            returnValue = this;
+
+        if ( isMethodCall ) {
+            var methodName = options;
+
+            if ( !pluginInstance ) {
+                return langx.error( "cannot call methods on " + pluginName +
+                    " prior to initialization; " +
+                    "attempted to call method '" + methodName + "'" );
+            }
+
+            if ( !langx.isFunction( pluginInstance[ methodName ] ) || methodName.charAt( 0 ) === "_" ) {
+                return langx.error( "no such method '" + methodName + "' for " + pluginName +
+                    " plugin instance" );
+            }
+
+            return pluginInstance[ methodName ].apply( pluginInstance, args );
+
+        } else {
+            // Allow multiple hashes to be passed on init
+            if ( args.length ) {
+                options = langx.mixin.apply( langx, [{},options ].concat( args ) );
+            }
+
+            if ( pluginInstance ) {
+                pluginInstance.option( options || {} );
+            } else {
+                var pluginKlass = pluginKlasses[pluginName]; 
+                pluginInstance = new pluginKlass(elm,options);
+                datax.data( elm, pluginName,pluginInstance );
+            }
+            return pluginInstance;
+        }
+
+        return returnValue;
+    }
+
+    var Plugin =   langx.Evented.inherit({
+        klassName: "Plugin",
+
+        _construct : function(elm,options) {
+           this._elm = elm;
+           this._initOptions(options);
+        },
+
+        _initOptions : function(options) {
+          var ctor = this.constructor,
+              cache = ctor.cache = ctor.cache || {},
+              defaults = cache.defaults;
+          if (!defaults) {
+            var  ctors = [];
+            do {
+              ctors.unshift(ctor);
+              if (ctor === Plugin) {
+                break;
+              }
+              ctor = ctor.superclass;
+            } while (ctor);
+
+            defaults = cache.defaults = {};
+            for (var i=0;i<ctors.length;i++) {
+              ctor = ctors[i];
+              if (ctor.prototype.hasOwnProperty("options")) {
+                langx.mixin(defaults,ctor.prototype.options);
+              }
+            }
+          }
+          return this.options = langx.mixin({},defaults,options);
+        },
+
+
+        destroy: function() {
+            var that = this;
+
+            this._destroy();
+            // We can probably remove the unbind calls in 2.0
+            // all event bindings should go through this._on()
+            datax.removeData(this._elm,this.pluginName );
+        },
+
+        _destroy: langx.noop,
+
+        _delay: function( handler, delay ) {
+            function handlerProxy() {
+                return ( typeof handler === "string" ? instance[ handler ] : handler )
+                    .apply( instance, arguments );
+            }
+            var instance = this;
+            return setTimeout( handlerProxy, delay || 0 );
+        },
+
+        option: function( key, value ) {
+            var options = key;
+            var parts;
+            var curOption;
+            var i;
+
+            if ( arguments.length === 0 ) {
+
+                // Don't return a reference to the internal hash
+                return langx.mixin( {}, this.options );
+            }
+
+            if ( typeof key === "string" ) {
+
+                // Handle nested keys, e.g., "foo.bar" => { foo: { bar: ___ } }
+                options = {};
+                parts = key.split( "." );
+                key = parts.shift();
+                if ( parts.length ) {
+                    curOption = options[ key ] = langx.mixin( {}, this.options[ key ] );
+                    for ( i = 0; i < parts.length - 1; i++ ) {
+                        curOption[ parts[ i ] ] = curOption[ parts[ i ] ] || {};
+                        curOption = curOption[ parts[ i ] ];
+                    }
+                    key = parts.pop();
+                    if ( arguments.length === 1 ) {
+                        return curOption[ key ] === undefined ? null : curOption[ key ];
+                    }
+                    curOption[ key ] = value;
+                } else {
+                    if ( arguments.length === 1 ) {
+                        return this.options[ key ] === undefined ? null : this.options[ key ];
+                    }
+                    options[ key ] = value;
+                }
+            }
+
+            this._setOptions( options );
+
+            return this;
+        },
+
+        _setOptions: function( options ) {
+            var key;
+
+            for ( key in options ) {
+                this._setOption( key, options[ key ] );
+            }
+
+            return this;
+        },
+
+        _setOption: function( key, value ) {
+
+            this.options[ key ] = value;
+
+            return this;
+        }
+
+    });
+
+    $.fn.plugin = function(name,options) {
+        var args = slice.call( arguments, 1 ),
+            self = this,
+            returnValue = this;
+
+        this.each(function(){
+            returnValue = instantiate.apply(self,[this,name].concat(args));
+        });
+        return returnValue;
+    };
+
+    elmx.partial("plugin",function(name,options) {
+        var args = slice.call( arguments, 1 );
+        return instantiate.apply(this,[this.domNode,name].concat(args));
+    }); 
+
+
+    function plugins() {
+        return plugins;
+    }
+     
+    langx.mixin(plugins, {
+        instantiate : instantiate,
+        
+        Plugin : Plugin,
+
+        register : register
+
+    });
+
+    return plugins;
+});
 define('skylark-bootstrap3/carousel',[
-    "skylark-utils/langx",
-    "skylark-utils/browser",
-    "skylark-utils/eventer",
-    "skylark-utils/noder",
-    "skylark-utils/geom",
-    "skylark-utils/velm",
-    "skylark-utils/query",
+    "skylark-langx/langx",
+    "skylark-utils-dom/browser",
+    "skylark-utils-dom/eventer",
+    "skylark-utils-dom/noder",
+    "skylark-utils-dom/geom",
+    "skylark-utils-dom/query",
+    "skylark-utils-dom/plugins",
     "./bs3"
-], function(langx, browser, eventer, noder, geom, velm, $, bs3) {
+], function(langx, browser, eventer, noder, geom, $, plugins, bs3) {
 
     /* ========================================================================
      * Bootstrap: carousel.js v3.3.7
@@ -10009,13 +9693,25 @@ define('skylark-bootstrap3/carousel',[
     // CAROUSEL CLASS DEFINITION
     // =========================
 
-    var Carousel = bs3.Carousel = bs3.WidgetBase.inherit({
+    var Carousel = bs3.Carousel = plugins.Plugin.inherit({
         klassName: "Carousel",
 
-        init: function(element, options) {
+        pluginName: "bs3.carousel",
+
+        options : {
+            interval: 5000,
+            pause: 'hover',
+            wrap: true,
+            keyboard: true
+
+        },
+
+        _construct: function(element, options) {
+            //this.options = options
+            this.overrided(element,options);
+
             this.$element = $(element)
             this.$indicators = this.$element.find('.carousel-indicators')
-            this.options = options
             this.paused = null
             this.sliding = null
             this.interval = null
@@ -10028,24 +9724,6 @@ define('skylark-bootstrap3/carousel',[
                 .on('mouseenter.bs.carousel', langx.proxy(this.pause, this))
                 .on('mouseleave.bs.carousel', langx.proxy(this.cycle, this));
 
-            this.$element.on("click.bs.carousel.data-api", "[data-slide],[data-slide-to]", function(e) {
-                var href
-                var $this = $(this)
-                var $target = $($this.attr('data-target') || (href = $this.attr('href')) && href.replace(/.*(?=#[^\s]+$)/, '')) // strip for ie7
-                if (!$target.hasClass('carousel')) return
-                var options = langx.mixin({}, $target.data(), $this.data());
-                var slideIndex = $this.attr('data-slide-to')
-                if (slideIndex) options.interval = false
-
-                Plugin.call($target, options);
-
-                if (slideIndex) {
-                    $target.data('bs.carousel').to(slideIndex);
-                }
-
-                e.preventDefault();
-
-            });
         }
     });
 
@@ -10175,7 +9853,7 @@ define('skylark-bootstrap3/carousel',[
             $active.addClass(direction)
             $next.addClass(direction)
             $active
-                .one('bsTransitionEnd', function() {
+                .one('transitionEnd', function() {
                     $next.removeClass([type, direction].join(' ')).addClass('active')
                     $active.removeClass(['active', direction].join(' '))
                     that.sliding = false
@@ -10183,7 +9861,7 @@ define('skylark-bootstrap3/carousel',[
                         that.$element.trigger(slidEvent)
                     }, 0)
                 })
-                .emulateTransitionEnd(Carousel.TRANSITION_DURATION)
+                .emulateTransitionEnd()
         } else {
             $active.removeClass('active')
             $next.addClass('active')
@@ -10199,7 +9877,7 @@ define('skylark-bootstrap3/carousel',[
 
     // CAROUSEL PLUGIN DEFINITION
     // ==========================
-
+    /*
     function Plugin(option) {
         return this.each(function() {
             var $this = $(this)
@@ -10219,23 +9897,10 @@ define('skylark-bootstrap3/carousel',[
             }
         })
     }
+    */
+    plugins.register(Carousel,"carousel");
 
-    var old = $.fn.carousel
-
-    $.fn.carousel = Plugin
-    $.fn.carousel.Constructor = Carousel
-
-
-    // CAROUSEL NO CONFLICT
-    // ====================
-
-    $.fn.carousel.noConflict = function() {
-        $.fn.carousel = old
-        return this;
-    }
-
-
-    return $.fn.carousel;
+    return Carousel;
 
 });
 define('skylark-bs-swt/carousel',[
@@ -10248,25 +9913,17 @@ define('skylark-bs-swt/carousel',[
   return carousel;
 });
 
-/**
- * skylark-fuelux - A version of fuelux that ported to running on skylarkjs
- * @author Hudaokeji, Inc.
- * @version v0.9.2
- * @link https://github.com/skylarkui/skylark-fuelux/
- * @license MIT
- */
-define('skylark-fuelux/sbswt',[
-  "skylark-utils/skylark",
-  "skylark-utils/langx",
-  "skylark-utils/browser",
-  "skylark-utils/eventer",
-  "skylark-utils/noder",
-  "skylark-utils/geom",
-  "skylark-utils/query",
-  "skylark-utils/widgets"
-],function(skylark,langx,browser,eventer,noder,geom,$,widgets){
+define('skylark-fuelux/fuelux',[
+  "skylark-langx/skylark",
+  "skylark-langx/langx",
+  "skylark-utils-dom/browser",
+  "skylark-utils-dom/eventer",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/geom",
+  "skylark-utils-dom/query"
+],function(skylark,langx,browser,eventer,noder,geom,$){
 	var ui = skylark.ui = skylark.ui || {}, 
-		sbswt = ui.sbswt = {};
+		fuelux = ui.fuelux = {};
 
 /*---------------------------------------------------------------------------------*/
 	/*
@@ -10317,7 +9974,7 @@ define('skylark-fuelux/sbswt',[
 
 
 
-	langx.mixin(sbswt, {
+	langx.mixin(fuelux, {
 		CONST: CONST,
 		cleanInput: cleanInput,
 		isBackspaceKey: isBackspaceKey,
@@ -10330,35 +9987,22 @@ define('skylark-fuelux/sbswt',[
 
 /*---------------------------------------------------------------------------------*/
 
-	var WidgetBase = widgets.Widget.inherit({
-        klassName: "WidgetBase",
-    });
-
-
-	langx.mixin(sbswt, {
-		WidgetBase : WidgetBase
+	langx.mixin(fuelux, {
+		WidgetBase : langx.Evented
 	});
 
-	return sbswt;
+	return fuelux;
 });
 
-/**
- * skylark-fuelux - A version of fuelux that ported to running on skylarkjs
- * @author Hudaokeji, Inc.
- * @version v0.9.2
- * @link https://github.com/skylarkui/skylark-fuelux/
- * @license MIT
- */
 define('skylark-fuelux/checkbox',[
-  "skylark-utils/langx",
-  "skylark-utils/browser",
-  "skylark-utils/eventer",
-  "skylark-utils/noder",
-  "skylark-utils/geom",
-  "skylark-utils/velm",
-  "skylark-utils/query",
-  "./sbswt"
-],function(langx,browser,eventer,noder,geom,velm,$,sbswt){
+  "skylark-langx/langx",
+  "skylark-utils-dom/browser",
+  "skylark-utils-dom/eventer",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/geom",
+  "skylark-utils-dom/query",
+  "./fuelux"
+],function(langx,browser,eventer,noder,geom,$,fuelux){
 
 
 	/*
@@ -10380,7 +10024,7 @@ define('skylark-fuelux/checkbox',[
 	};
 
 
-	var Checkbox = sbswt.Checkbox = sbswt.WidgetBase.inherit({
+	var Checkbox = fuelux.Checkbox = fuelux.WidgetBase.inherit({
 		klassName: "Checkbox",
 
 		init : function(element,options) {
@@ -10576,23 +10220,51 @@ define('skylark-bs-swt/checkbox',[
    return checkbox;
 });
 
-/**
- * skylark-bootstrap3 - The skylark standard widget tookit
- * @author Hudaokeji, Inc.
- * @version v0.9.2
- * @link https://github.com/skylarkui/skylark-bootstrap3/
- * @license MIT
- */
-define('skylark-bootstrap3/collapse',[
-  "skylark-utils/langx",
-  "skylark-utils/browser",
-  "skylark-utils/eventer",
-  "skylark-utils/noder",
-  "skylark-utils/geom",
-  "skylark-utils/velm",
-  "skylark-utils/query",
+define('skylark-bootstrap3/transition',[
+  "skylark-langx/langx",
+  "skylark-utils-dom/browser",
+  "skylark-utils-dom/eventer",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/geom",
+  "skylark-utils-dom/query",
   "./bs3"
-],function(langx,browser,eventer,noder,geom,velm,$,bs3){
+],function(langx,browser,eventer,noder,geom,$,bs3){
+
+/* ========================================================================
+ * Bootstrap: transition.js v3.3.7
+ * http://getbootstrap.com/javascript/#transitions
+ * ========================================================================
+ * Copyright 2011-2016 Twitter, Inc.
+ * Licensed under MIT (https://github.com/twbs/bootstrap/blob/master/LICENSE)
+ * ======================================================================== */
+
+  'use strict';
+
+  // http://blog.alexmaccaw.com/css-transitions
+  $.fn.emulateTransitionEnd = function (duration) {
+    var called = false
+    var $el = this
+    $(this).one('transitionEnd', function () { called = true })
+    var callback = function () { if (!called) $($el).trigger(browser.support.transition.end) }
+    setTimeout(callback, duration)
+    return this
+  } 
+
+  eventer.special.bsTransitionEnd = eventer.special.transitionEnd;
+});
+
+define('skylark-bootstrap3/collapse',[
+    "skylark-langx/langx",
+    "skylark-utils-dom/browser",
+    "skylark-utils-dom/eventer",
+    "skylark-utils-dom/noder",
+    "skylark-utils-dom/geom",
+    "skylark-utils-dom/query",
+    "skylark-utils-dom/plugins",
+    "./bs3",
+    "./transition"
+], function(langx, browser, eventer, noder, geom, $, plugins, bs3) {
+
 
 /* ========================================================================
  * Bootstrap: collapse.js v3.3.7
@@ -10609,12 +10281,20 @@ define('skylark-bootstrap3/collapse',[
   // COLLAPSE PUBLIC CLASS DEFINITION
   // ================================
 
-  var Collapse = bs3.Collapse = bs3.WidgetBase.inherit({
+  var Collapse = bs3.Collapse = plugins.Plugin.inherit({
     klassName: "Collapse",
 
-    init : function(element,options) {
+    pluginName : "bs3.collapse",
+
+    options : {
+      toggle: true
+    },
+
+    _construct : function(element,options) {
+      //this.options       = langx.mixin({}, Collapse.DEFAULTS, options)
+      this.overrided(element,options);
+
       this.$element      = $(element)
-      this.options       = langx.mixin({}, Collapse.DEFAULTS, options)
       this.$trigger      = $('[data-toggle="collapse"][href="#' + element.id + '"],' +
                              '[data-toggle="collapse"][data-target="#' + element.id + '"]')
       this.transitioning = null
@@ -10628,20 +10308,6 @@ define('skylark-bootstrap3/collapse',[
       if (this.options.toggle) {
         this.toggle();
       }
-
-      this.$element.on('click.bs.collapse.data-api', '[data-toggle="collapse"]', function (e) {
-        var $this   = $(this)
-
-        if (!$this.attr('data-target')) {
-          e.preventDefault();
-        }
-
-        var $target = getTargetFromTrigger($this);
-        var data    = $target.data('bs.collapse');
-        var option  = data ? 'toggle' : $this.data();
-
-        Plugin.call($target, option);
-      })
     },
 
     dimension : function () {
@@ -10665,7 +10331,8 @@ define('skylark-bootstrap3/collapse',[
       if (startEvent.isDefaultPrevented()) return
 
       if (actives && actives.length) {
-        Plugin.call(actives, 'hide')
+        //Plugin.call(actives, 'hide')
+        actives.collapse().hide();
         activesData || actives.data('bs.collapse', null)
       }
 
@@ -10696,7 +10363,7 @@ define('skylark-bootstrap3/collapse',[
       var scrollSize = langx.camelCase(['scroll', dimension].join('-'))
 
       this.$element
-        .one('bsTransitionEnd', langx.proxy(complete, this))
+        .one('transitionEnd', langx.proxy(complete, this))
         .emulateTransitionEnd(Collapse.TRANSITION_DURATION)[dimension](this.$element[0][scrollSize])
     },
 
@@ -10734,7 +10401,7 @@ define('skylark-bootstrap3/collapse',[
 
       this.$element
         [dimension](0)
-        .one('bsTransitionEnd', langx.proxy(complete, this))
+        .one('transitionEnd', langx.proxy(complete, this))
         .emulateTransitionEnd(Collapse.TRANSITION_DURATION)
     },
 
@@ -10784,6 +10451,7 @@ define('skylark-bootstrap3/collapse',[
   // COLLAPSE PLUGIN DEFINITION
   // ==========================
 
+  /*
   function Plugin(option) {
     return this.each(function () {
       var $this   = $(this)
@@ -10808,9 +10476,11 @@ define('skylark-bootstrap3/collapse',[
     $.fn.collapse = old
     return this
   }
+  */
 
+  plugins.register(Collapse,"collapse");
 
-  return $.fn.collapse;
+  return Collapse;
 
 });
 
@@ -10824,23 +10494,15 @@ define('skylark-bs-swt/collapse',[
   return collapse;
 });
 
-/**
- * skylark-fuelux - A version of fuelux that ported to running on skylarkjs
- * @author Hudaokeji, Inc.
- * @version v0.9.2
- * @link https://github.com/skylarkui/skylark-fuelux/
- * @license MIT
- */
 define('skylark-fuelux/combobox',[
-  "skylark-utils/langx",
-  "skylark-utils/browser",
-  "skylark-utils/eventer",
-  "skylark-utils/noder",
-  "skylark-utils/geom",
-  "skylark-utils/velm",
-  "skylark-utils/query",
-  "./sbswt"
-],function(langx,browser,eventer,noder,geom,velm,$,sbswt){
+  "skylark-langx/langx",
+  "skylark-utils-dom/browser",
+  "skylark-utils-dom/eventer",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/geom",
+  "skylark-utils-dom/query",
+  "./fuelux"
+],function(langx,browser,eventer,noder,geom,$,fuelux){
 
 
 	/*
@@ -10856,7 +10518,7 @@ define('skylark-fuelux/combobox',[
 
 	// COMBOBOX CONSTRUCTOR AND PROTOTYPE
 
-	var Combobox = sbswt.Combobox = sbswt.WidgetBase.inherit({
+	var Combobox = fuelux.Combobox = fuelux.WidgetBase.inherit({
 		klassName: "Combobox",
 
 		init : function(element,options) {
@@ -11226,23 +10888,15 @@ define('skylark-bs-swt/combobox',[
    return combobox;
 });
 
-/**
- * skylark-fuelux - A version of fuelux that ported to running on skylarkjs
- * @author Hudaokeji, Inc.
- * @version v0.9.2
- * @link https://github.com/skylarkui/skylark-fuelux/
- * @license MIT
- */
 define('skylark-fuelux/datepicker',[
-    "skylark-utils/langx",
-    "skylark-utils/browser",
-    "skylark-utils/eventer",
-    "skylark-utils/noder",
-    "skylark-utils/geom",
-    "skylark-utils/velm",
-    "skylark-utils/query",
-    "./sbswt"
-], function(langx, browser, eventer, noder, geom, velm, $, sbswt) {
+    "skylark-langx/langx",
+    "skylark-utils-dom/browser",
+    "skylark-utils-dom/eventer",
+    "skylark-utils-dom/noder",
+    "skylark-utils-dom/geom",
+    "skylark-utils-dom/query",
+    "./fuelux"
+], function(langx, browser, eventer, noder, geom, $, fuelux) {
 
 
     /*
@@ -11288,7 +10942,7 @@ define('skylark-fuelux/datepicker',[
     */
     // DATEPICKER CONSTRUCTOR AND PROTOTYPE
 
-    var Datepicker = sbswt.Datepicker = sbswt.WidgetBase.inherit({
+    var Datepicker = fuelux.Datepicker = fuelux.WidgetBase.inherit({
         klassName: "Datepicker",
 
         init: function(element, options) {
@@ -12066,23 +11720,15 @@ define('skylark-bs-swt/datepicker',[
    return datepicker;
 });
 
-/**
- * skylark-bootstrap3 - The skylark standard widget tookit
- * @author Hudaokeji, Inc.
- * @version v0.9.2
- * @link https://github.com/skylarkui/skylark-bootstrap3/
- * @license MIT
- */
 define('skylark-bootstrap3/dropdown',[
-  "skylark-utils/langx",
-  "skylark-utils/browser",
-  "skylark-utils/eventer",
-  "skylark-utils/noder",
-  "skylark-utils/geom",
-  "skylark-utils/velm",
-  "skylark-utils/query",
+  "skylark-langx/langx",
+  "skylark-utils-dom/browser",
+  "skylark-utils-dom/eventer",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/geom",
+  "skylark-utils-dom/query",
   "./bs3"
-],function(langx,browser,eventer,noder,geom,velm,$,bs3){
+],function(langx,browser,eventer,noder,geom,$,bs3){
 
 /* ========================================================================
  * Bootstrap: dropdown.js v3.3.7
@@ -12264,22 +11910,14 @@ define('skylark-bs-swt/dropdown',[
   return dropdown;
 });
 
-/**
- * skylark-fuelux - A version of fuelux that ported to running on skylarkjs
- * @author Hudaokeji, Inc.
- * @version v0.9.2
- * @link https://github.com/skylarkui/skylark-fuelux/
- * @license MIT
- */
 define('skylark-fuelux/infinite-scroll',[
-  "skylark-utils/langx",
-  "skylark-utils/browser",
-  "skylark-utils/eventer",
-  "skylark-utils/noder",
-  "skylark-utils/geom",
-  "skylark-utils/velm",
-  "skylark-utils/query"
-],function(langx,browser,eventer,noder,geom,velm,$){
+  "skylark-langx/langx",
+  "skylark-utils-dom/browser",
+  "skylark-utils-dom/eventer",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/geom",
+  "skylark-utils-dom/query"
+],function(langx,browser,eventer,noder,geom,$){
 
 	/*
 	 * Fuel UX Checkbox
@@ -12454,23 +12092,15 @@ define('skylark-bs-swt/infinite-scroll',[
    return infiniteScroll;
 });
 
-/**
- * skylark-fuelux - A version of fuelux that ported to running on skylarkjs
- * @author Hudaokeji, Inc.
- * @version v0.9.2
- * @link https://github.com/skylarkui/skylark-fuelux/
- * @license MIT
- */
 define('skylark-fuelux/loader',[
-  "skylark-utils/langx",
-  "skylark-utils/browser",
-  "skylark-utils/eventer",
-  "skylark-utils/noder",
-  "skylark-utils/geom",
-  "skylark-utils/velm",
-  "skylark-utils/query",
-  "./sbswt"
-],function(langx,browser,eventer,noder,geom,velm,$,sbswt){
+  "skylark-langx/langx",
+  "skylark-utils-dom/browser",
+  "skylark-utils-dom/eventer",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/geom",
+  "skylark-utils-dom/query",
+  "./fuelux"
+],function(langx,browser,eventer,noder,geom,$,fuelux){
 
 
 	/*
@@ -12486,7 +12116,7 @@ define('skylark-fuelux/loader',[
 
 	// LOADER CONSTRUCTOR AND PROTOTYPE
 
-	var Loader = sbswt.Loader = sbswt.WidgetBase.inherit({
+	var Loader = fuelux.Loader = fuelux.WidgetBase.inherit({
 		klassName: "Loader",
 
 		init : function(element,options) {
@@ -12574,23 +12204,15 @@ define('skylark-bs-swt/loader',[
    return loader;
 });
 
-/**
- * skylark-bootstrap3 - The skylark standard widget tookit
- * @author Hudaokeji, Inc.
- * @version v0.9.2
- * @link https://github.com/skylarkui/skylark-bootstrap3/
- * @license MIT
- */
 define('skylark-bootstrap3/modal',[
-  "skylark-utils/langx",
-  "skylark-utils/browser",
-  "skylark-utils/eventer",
-  "skylark-utils/noder",
-  "skylark-utils/geom",
-  "skylark-utils/velm",
-  "skylark-utils/query",
+  "skylark-langx/langx",
+  "skylark-utils-dom/browser",
+  "skylark-utils-dom/eventer",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/geom",
+  "skylark-utils-dom/query",
   "./bs3"
-],function(langx,browser,eventer,noder,geom,velm,$,bs3){
+],function(langx,browser,eventer,noder,geom,$,bs3){
 
 /* ========================================================================
  * Bootstrap: modal.js v3.3.7
@@ -12686,7 +12308,7 @@ define('skylark-bootstrap3/modal',[
 
         transition ?
           that.$dialog // wait for modal to slide in
-            .one('bsTransitionEnd', function () {
+            .one('transitionEnd', function () {
               that.$element.trigger('focus').trigger(e)
             })
             .emulateTransitionEnd(Modal.TRANSITION_DURATION) :
@@ -12719,7 +12341,7 @@ define('skylark-bootstrap3/modal',[
 
       browser.support.transition && this.$element.hasClass('fade') ?
         this.$element
-          .one('bsTransitionEnd', langx.proxy(this.hideModal, this))
+          .one('transitionEnd', langx.proxy(this.hideModal, this))
           .emulateTransitionEnd(Modal.TRANSITION_DURATION) :
         this.hideModal()
     },
@@ -12805,7 +12427,7 @@ define('skylark-bootstrap3/modal',[
 
         doAnimate ?
           this.$backdrop
-            .one('bsTransitionEnd', callback)
+            .one('transitionEnd', callback)
             .emulateTransitionEnd(Modal.BACKDROP_TRANSITION_DURATION) :
           callback()
 
@@ -12818,7 +12440,7 @@ define('skylark-bootstrap3/modal',[
         }
         browser.support.transition && this.$element.hasClass('fade') ?
           this.$backdrop
-            .one('bsTransitionEnd', callbackRemove)
+            .one('transitionEnd', callbackRemove)
             .emulateTransitionEnd(Modal.BACKDROP_TRANSITION_DURATION) :
           callbackRemove()
 
@@ -12937,23 +12559,15 @@ define('skylark-bs-swt/modal',[
   return modal;
 });
 
-/**
- * skylark-fuelux - A version of fuelux that ported to running on skylarkjs
- * @author Hudaokeji, Inc.
- * @version v0.9.2
- * @link https://github.com/skylarkui/skylark-fuelux/
- * @license MIT
- */
 define('skylark-fuelux/picker',[
-  "skylark-utils/langx",
-  "skylark-utils/browser",
-  "skylark-utils/eventer",
-  "skylark-utils/noder",
-  "skylark-utils/geom",
-  "skylark-utils/velm",
-  "skylark-utils/query",
-  "./sbswt"
-],function(langx,browser,eventer,noder,geom,velm,$,sbswt){
+  "skylark-langx/langx",
+  "skylark-utils-dom/browser",
+  "skylark-utils-dom/eventer",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/geom",
+  "skylark-utils-dom/query",
+  "./fuelux"
+],function(langx,browser,eventer,noder,geom,$,fuelux){
 
 
 	/*
@@ -12968,7 +12582,7 @@ define('skylark-fuelux/picker',[
 	// PLACARD CONSTRUCTOR AND PROTOTYPE
 
 
-	var Picker = sbswt.Picker = sbswt.WidgetBase.inherit({
+	var Picker = fuelux.Picker = fuelux.WidgetBase.inherit({
 		klassName: "Picker",
 
 		init : function(element,options) {
@@ -13238,20 +12852,13 @@ define('skylark-bs-swt/picker',[
    return picker;
 });
 
-/**
- * skylark-fuelux - A version of fuelux that ported to running on skylarkjs
- * @author Hudaokeji, Inc.
- * @version v0.9.2
- * @link https://github.com/skylarkui/skylark-fuelux/
- * @license MIT
- */
 define('skylark-fuelux/dropdown-autoflip',[
-  "skylark-utils/langx",
-  "skylark-utils/browser",
-  "skylark-utils/eventer",
-  "skylark-utils/noder",
-  "skylark-utils/geom",
-  "skylark-utils/query"
+  "skylark-langx/langx",
+  "skylark-utils-dom/browser",
+  "skylark-utils-dom/eventer",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/geom",
+  "skylark-utils-dom/query"
 ],function(langx,browser,eventer,noder,geom,$){
 
 	/*
@@ -13366,27 +12973,20 @@ define('skylark-fuelux/dropdown-autoflip',[
 	$.fn.dropdownautoflip = function () {
 		/* empty */
 	};
+	
 
 });
 
-/**
- * skylark-fuelux - A version of fuelux that ported to running on skylarkjs
- * @author Hudaokeji, Inc.
- * @version v0.9.2
- * @link https://github.com/skylarkui/skylark-fuelux/
- * @license MIT
- */
 define('skylark-fuelux/pillbox',[
-  "skylark-utils/langx",
-  "skylark-utils/browser",
-  "skylark-utils/eventer",
-  "skylark-utils/noder",
-  "skylark-utils/geom",
-  "skylark-utils/velm",
-  "skylark-utils/query",
-  "./sbswt",
+  "skylark-langx/langx",
+  "skylark-utils-dom/browser",
+  "skylark-utils-dom/eventer",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/geom",
+  "skylark-utils-dom/query",
+  "./fuelux",
   "./dropdown-autoflip"
-],function(langx,browser,eventer,noder,geom,velm,$,sbswt){
+],function(langx,browser,eventer,noder,geom,$,fuelux){
 
 	/*
 	 * Fuel UX Checkbox
@@ -13402,20 +13002,20 @@ define('skylark-fuelux/pillbox',[
 
 	var old = $.fn.pillbox;
 
-	var CONST = sbswt.CONST;
+	var CONST = fuelux.CONST;
 	var COMMA_KEYCODE = CONST.COMMA_KEYCODE;
 	var ENTER_KEYCODE = CONST.ENTER_KEYCODE;
-	var isBackspaceKey = sbswt.isBackspaceKey;
-	var isDeleteKey = sbswt.isDeleteKey;
-	var isTabKey = sbswt.isTabKey;
-	var isUpArrow = sbswt.isUpArrow;
-	var isDownArrow = sbswt.isDownArrow;
-	var cleanInput = sbswt.cleanInput;
-	var isShiftHeld = sbswt.isShiftHeld;
+	var isBackspaceKey = fuelux.isBackspaceKey;
+	var isDeleteKey = fuelux.isDeleteKey;
+	var isTabKey = fuelux.isTabKey;
+	var isUpArrow = fuelux.isUpArrow;
+	var isDownArrow = fuelux.isDownArrow;
+	var cleanInput = fuelux.cleanInput;
+	var isShiftHeld = fuelux.isShiftHeld;
 
 	// PILLBOX CONSTRUCTOR AND PROTOTYPE
 
-	var Pillbox = sbswt.Pillbox = sbswt.WidgetBase.inherit({
+	var Pillbox = fuelux.Pillbox = fuelux.WidgetBase.inherit({
 		klassName: "Pillbox",
 
 		init : function(element,options) {
@@ -14154,23 +13754,15 @@ define('skylark-bs-swt/pillbox',[
    return pillbox;
 });
 
-/**
- * skylark-fuelux - A version of fuelux that ported to running on skylarkjs
- * @author Hudaokeji, Inc.
- * @version v0.9.2
- * @link https://github.com/skylarkui/skylark-fuelux/
- * @license MIT
- */
 define('skylark-fuelux/placard',[
-  "skylark-utils/langx",
-  "skylark-utils/browser",
-  "skylark-utils/eventer",
-  "skylark-utils/noder",
-  "skylark-utils/geom",
-  "skylark-utils/velm",
-  "skylark-utils/query",
-  "./sbswt"
-],function(langx,browser,eventer,noder,geom,velm,$,sbswt){
+  "skylark-langx/langx",
+  "skylark-utils-dom/browser",
+  "skylark-utils-dom/eventer",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/geom",
+  "skylark-utils-dom/query",
+  "./fuelux"
+],function(langx,browser,eventer,noder,geom,$,fuelux){
 
 
 	/*
@@ -14187,7 +13779,7 @@ define('skylark-fuelux/placard',[
 
 	// PLACARD CONSTRUCTOR AND PROTOTYPE
 
-	var Placard = sbswt.Placard = sbswt.WidgetBase.inherit({
+	var Placard = fuelux.Placard = fuelux.WidgetBase.inherit({
 		klassName: "Placard",
 
 		init : function(element,options) {
@@ -14507,6 +14099,9 @@ define('skylark-fuelux/placard',[
 		});
 	});
 	*/
+	
+	return $.fn.placard;
+
 });
 
 define('skylark-bs-swt/placard',[
@@ -14518,23 +14113,15 @@ define('skylark-bs-swt/placard',[
    return placard;
 });
 
-/**
- * skylark-bootstrap3 - The skylark standard widget tookit
- * @author Hudaokeji, Inc.
- * @version v0.9.2
- * @link https://github.com/skylarkui/skylark-bootstrap3/
- * @license MIT
- */
 define('skylark-bootstrap3/tooltip',[
-  "skylark-utils/langx",
-  "skylark-utils/browser",
-  "skylark-utils/eventer",
-  "skylark-utils/noder",
-  "skylark-utils/geom",
-  "skylark-utils/velm",
-  "skylark-utils/query",
+  "skylark-langx/langx",
+  "skylark-utils-dom/browser",
+  "skylark-utils-dom/eventer",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/geom",
+  "skylark-utils-dom/query",
   "./bs3"
-],function(langx,browser,eventer,noder,geom,velm,$,bs3){
+],function(langx,browser,eventer,noder,geom,$,bs3){
 
 /* ========================================================================
  * Bootstrap: tooltip.js v3.3.7
@@ -14755,7 +14342,7 @@ define('skylark-bootstrap3/tooltip',[
 
         browser.support.transition && this.$tip.hasClass('fade') ?
           $tip
-            .one('bsTransitionEnd', complete)
+            .one('transitionEnd', complete)
             .emulateTransitionEnd(Tooltip.TRANSITION_DURATION) :
           complete()
       }
@@ -14851,7 +14438,7 @@ define('skylark-bootstrap3/tooltip',[
 
       browser.support.transition && $tip.hasClass('fade') ?
         $tip
-          .one('bsTransitionEnd', complete)
+          .one('transitionEnd', complete)
           .emulateTransitionEnd(Tooltip.TRANSITION_DURATION) :
         complete()
 
@@ -15063,22 +14650,14 @@ define('skylark-bootstrap3/tooltip',[
 
 });
 
-/**
- * skylark-bootstrap3 - The skylark standard widget tookit
- * @author Hudaokeji, Inc.
- * @version v0.9.2
- * @link https://github.com/skylarkui/skylark-bootstrap3/
- * @license MIT
- */
 define('skylark-bootstrap3/popover',[
-  "skylark-utils/browser",
-  "skylark-utils/langx",
-  "skylark-utils/eventer",
-  "skylark-utils/velm",
-  "skylark-utils/query",
+  "skylark-utils-dom/browser",
+  "skylark-langx/langx",
+  "skylark-utils-dom/eventer",
+  "skylark-utils-dom/query",
   "./bs3",
   "./tooltip" 
-],function(browser,langx,eventer,velm,$,bs3,tooltip){
+],function(browser,langx,eventer,$,bs3,tooltip){
 /* ========================================================================
  * Bootstrap: popover.js v3.3.7
  * http://getbootstrap.com/javascript/#popovers
@@ -15196,23 +14775,15 @@ define('skylark-bs-swt/popover',[
   return popover;
 });
 
-/**
- * skylark-fuelux - A version of fuelux that ported to running on skylarkjs
- * @author Hudaokeji, Inc.
- * @version v0.9.2
- * @link https://github.com/skylarkui/skylark-fuelux/
- * @license MIT
- */
 define('skylark-fuelux/radio',[
-  "skylark-utils/langx",
-  "skylark-utils/browser",
-  "skylark-utils/eventer",
-  "skylark-utils/noder",
-  "skylark-utils/geom",
-  "skylark-utils/velm",
-  "skylark-utils/query",
-  "./sbswt"
-],function(langx,browser,eventer,noder,geom,velm,$,sbswt){
+  "skylark-langx/langx",
+  "skylark-utils-dom/browser",
+  "skylark-utils-dom/eventer",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/geom",
+  "skylark-utils-dom/query",
+  "./fuelux"
+],function(langx,browser,eventer,noder,geom,$,fuelux){
 
 
 	/*
@@ -15232,7 +14803,7 @@ define('skylark-fuelux/radio',[
 		}
 	};
 
-	var Radio = sbswt.Radio = sbswt.WidgetBase.inherit({
+	var Radio = fuelux.Radio = fuelux.WidgetBase.inherit({
 		klassName: "Radio",
 
 		init : function(element,options) {
@@ -15433,23 +15004,16 @@ define('skylark-bs-swt/radio',[
    return radio;
 });
 
-/**
- * skylark-fuelux - A version of fuelux that ported to running on skylarkjs
- * @author Hudaokeji, Inc.
- * @version v0.9.2
- * @link https://github.com/skylarkui/skylark-fuelux/
- * @license MIT
- */
 define('skylark-fuelux/selectlist',[
-  "skylark-utils/langx",
-  "skylark-utils/browser",
-  "skylark-utils/eventer",
-  "skylark-utils/noder",
-  "skylark-utils/geom",
-  "skylark-utils/velm",
-  "skylark-utils/query",
-  "./sbswt"
-],function(langx,browser,eventer,noder,geom,velm,$,sbswt){
+  "skylark-langx/langx",
+  "skylark-utils-dom/browser",
+  "skylark-utils-dom/eventer",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/geom",
+  "skylark-utils-dom/query",
+  "./fuelux",
+  "skylark-bootstrap3/dropdown"
+],function(langx,browser,eventer,noder,geom,$,fuelux){
 
 
 	/*
@@ -15463,7 +15027,7 @@ define('skylark-fuelux/selectlist',[
 	var old = $.fn.selectlist;
 	// SELECT CONSTRUCTOR AND PROTOTYPE
 
-	var Selectlist = sbswt.Selectlist = sbswt.WidgetBase.inherit({
+	var Selectlist = fuelux.Selectlist = fuelux.WidgetBase.inherit({
 		klassName: "Selectlist",
 
 		init : function(element,options) {
@@ -15727,29 +15291,19 @@ define('skylark-fuelux/selectlist',[
 	return $.fn.selectlist;
 });
 
-/**
- * skylark-ui-repeater - The skylark repeater widget
- * @author Hudaokeji, Inc.
- * @version v0.9.0
- * @link https://github.com/skylarkui/skylark-ui-repeater/
- * @license MIT
- */
-define('skylark-ui-repeater/repeater',[
-  "skylark-utils/skylark",
-  "skylark-utils/langx",
-  "skylark-utils/browser",
-  "skylark-utils/eventer",
-  "skylark-utils/noder",
-  "skylark-utils/geom",
-  "skylark-utils/velm",
-  "skylark-utils/query",
-  "skylark-utils/widgets",
-  "skylark-fuelux/loader",
-  "skylark-fuelux/selectlist",
-  "skylark-fuelux/combobox"  
-],function(skylark,langx,browser,eventer,noder,geom,velm,$,widgets){
-
-	var ui = skylark.ui = skylark.ui || {};
+define('skylark-fuelux/repeater',[
+  "skylark-utils-dom/skylark",
+  "skylark-langx/langx",
+  "skylark-utils-dom/browser",
+  "skylark-utils-dom/eventer",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/geom",
+  "skylark-utils-dom/query",
+  "./fuelux",
+  "./loader",
+  "./selectlist",
+  "./combobox"  
+],function(skylark,langx,browser,eventer,noder,geom,$,fuelux){
 
 	/*
 	 * Repeater
@@ -15763,7 +15317,7 @@ define('skylark-ui-repeater/repeater',[
 
 	// REPEATER CONSTRUCTOR AND PROTOTYPE
 
-	var Repeater = ui.Repeater = widgets.Widget.inherit({
+	var Repeater = fuelux.Repeater = fuelux.WidgetBase.inherit({
 		klassName: "Repeater",
 
 		init : function(element,options) {
@@ -16654,7 +16208,7 @@ define('skylark-ui-repeater/repeater',[
 });
 
 define('skylark-bs-swt/repeater',[
-  "skylark-ui-repeater/repeater",
+  "skylark-fuelux/repeater",
   "./sbswt"
 ],function(repeater,sbswt){
    sbswt.Repeater = repeater.Constructor;
@@ -16662,23 +16216,15 @@ define('skylark-bs-swt/repeater',[
    return repeater;
 });
 
-/**
- * skylark-fuelux - A version of fuelux that ported to running on skylarkjs
- * @author Hudaokeji, Inc.
- * @version v0.9.2
- * @link https://github.com/skylarkui/skylark-fuelux/
- * @license MIT
- */
 define('skylark-fuelux/spinbox',[
-  "skylark-utils/langx",
-  "skylark-utils/browser",
-  "skylark-utils/eventer",
-  "skylark-utils/noder",
-  "skylark-utils/geom",
-  "skylark-utils/velm",
-  "skylark-utils/query",
-  "./sbswt"
-],function(langx,browser,eventer,noder,geom,velm,$,sbswt){
+  "skylark-langx/langx",
+  "skylark-utils-dom/browser",
+  "skylark-utils-dom/eventer",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/geom",
+  "skylark-utils-dom/query",
+  "./fuelux"
+],function(langx,browser,eventer,noder,geom,$,fuelux){
 
 
 	/*
@@ -16693,7 +16239,7 @@ define('skylark-fuelux/spinbox',[
 
 	// SPINBOX CONSTRUCTOR AND PROTOTYPE
 
-	var Spinbox = sbswt.Spinbox = sbswt.WidgetBase.inherit({
+	var Spinbox = fuelux.Spinbox = fuelux.WidgetBase.inherit({
 		klassName: "Spinbox",
 
 		init : function(element,options) {
@@ -17098,28 +16644,20 @@ define('skylark-fuelux/spinbox',[
 	return $.fn.spinbox;
 });
 
-/**
- * skylark-fuelux - A version of fuelux that ported to running on skylarkjs
- * @author Hudaokeji, Inc.
- * @version v0.9.2
- * @link https://github.com/skylarkui/skylark-fuelux/
- * @license MIT
- */
 define('skylark-fuelux/scheduler',[
-  "skylark-utils/langx",
-  "skylark-utils/browser",
-  "skylark-utils/eventer",
-  "skylark-utils/noder",
-  "skylark-utils/geom",
-  "skylark-utils/velm",
-  "skylark-utils/query",
-  "./sbswt",
+  "skylark-langx/langx",
+  "skylark-utils-dom/browser",
+  "skylark-utils-dom/eventer",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/geom",
+  "skylark-utils-dom/query",
+  "./fuelux",
   "./combobox",
   "./datepicker",
   "./radio",
   "./selectlist",
   "./spinbox"
-],function(langx,browser,eventer,noder,geom,velm,$,sbswt){
+],function(langx,browser,eventer,noder,geom,$,fuelux){
 
 	/*
 	 * Fuel UX Checkbox
@@ -17137,7 +16675,7 @@ define('skylark-fuelux/scheduler',[
 
 	// SCHEDULER CONSTRUCTOR AND PROTOTYPE
 
-	var Scheduler = sbswt.Scheduler = sbswt.WidgetBase.inherit({
+	var Scheduler = fuelux.Scheduler = fuelux.WidgetBase.inherit({
 		klassName: "Scheduler",
 
 		init : function(element,options) {
@@ -17906,23 +17444,15 @@ define('skylark-bs-swt/scheduler',[
    return scheduler;
 });
 
-/**
- * skylark-bootstrap3 - The skylark standard widget tookit
- * @author Hudaokeji, Inc.
- * @version v0.9.2
- * @link https://github.com/skylarkui/skylark-bootstrap3/
- * @license MIT
- */
 define('skylark-bootstrap3/scrollspy',[
-  "skylark-utils/langx",
-  "skylark-utils/browser",
-  "skylark-utils/eventer",
-  "skylark-utils/noder",
-  "skylark-utils/geom",
-  "skylark-utils/velm",
-  "skylark-utils/query",
+  "skylark-langx/langx",
+  "skylark-utils-dom/browser",
+  "skylark-utils-dom/eventer",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/geom",
+  "skylark-utils-dom/query",
   "./bs3"
-],function(langx,browser,eventer,noder,geom,velm,$,bs3){
+],function(langx,browser,eventer,noder,geom,$,bs3){
 
 /* ========================================================================
  * Bootstrap: scrollspy.js v3.3.7
@@ -18100,23 +17630,15 @@ define('skylark-bs-swt/scrollspy',[
   return scrollspy;
 });
 
-/**
- * skylark-fuelux - A version of fuelux that ported to running on skylarkjs
- * @author Hudaokeji, Inc.
- * @version v0.9.2
- * @link https://github.com/skylarkui/skylark-fuelux/
- * @license MIT
- */
 define('skylark-fuelux/search',[
-  "skylark-utils/langx",
-  "skylark-utils/browser",
-  "skylark-utils/eventer",
-  "skylark-utils/noder",
-  "skylark-utils/geom",
-  "skylark-utils/velm",
-  "skylark-utils/query",
-  "./sbswt"
-],function(langx,browser,eventer,noder,geom,velm,$,sbswt){
+  "skylark-langx/langx",
+  "skylark-utils-dom/browser",
+  "skylark-utils-dom/eventer",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/geom",
+  "skylark-utils-dom/query",
+  "./fuelux"
+],function(langx,browser,eventer,noder,geom,$,fuelux){
 
 
 	/*
@@ -18131,7 +17653,7 @@ define('skylark-fuelux/search',[
 
 	// SEARCH CONSTRUCTOR AND PROTOTYPE
 
-	var Search = sbswt.Search = sbswt.WidgetBase.inherit({
+	var Search = fuelux.Search = fuelux.WidgetBase.inherit({
 		klassName: "Search",
 
 		init : function(element,options) {
@@ -18347,23 +17869,15 @@ define('skylark-bs-swt/spinbox',[
    return spinbox;
 });
 
-/**
- * skylark-bootstrap3 - The skylark standard widget tookit
- * @author Hudaokeji, Inc.
- * @version v0.9.2
- * @link https://github.com/skylarkui/skylark-bootstrap3/
- * @license MIT
- */
 define('skylark-bootstrap3/tab',[
-  "skylark-utils/langx",
-  "skylark-utils/browser",
-  "skylark-utils/eventer",
-  "skylark-utils/noder",
-  "skylark-utils/geom",
-  "skylark-utils/velm",
-  "skylark-utils/query",
+  "skylark-langx/langx",
+  "skylark-utils-dom/browser",
+  "skylark-utils-dom/eventer",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/geom",
+  "skylark-utils-dom/query",
   "./bs3"
-],function(langx,browser,eventer,noder,geom,velm,$,bs3){
+],function(langx,browser,eventer,noder,geom,$,bs3){
 
 /* ========================================================================
  * Bootstrap: tab.js v3.3.7
@@ -18473,7 +17987,7 @@ define('skylark-bootstrap3/tab',[
 
       $active.length && transition ?
         $active
-          .one('bsTransitionEnd', next)
+          .one('transitionEnd', next)
           .emulateTransitionEnd(Tab.TRANSITION_DURATION) :
         next()
 
@@ -18515,6 +18029,8 @@ define('skylark-bootstrap3/tab',[
     return this
   }
 
+  return $.fn.tab;
+
 });
 
 define('skylark-bs-swt/tab',[
@@ -18537,23 +18053,15 @@ define('skylark-bs-swt/tooltip',[
   return tooltip;
 });
 
-/**
- * skylark-fuelux - A version of fuelux that ported to running on skylarkjs
- * @author Hudaokeji, Inc.
- * @version v0.9.2
- * @link https://github.com/skylarkui/skylark-fuelux/
- * @license MIT
- */
 define('skylark-fuelux/wizard',[
-  "skylark-utils/langx",
-  "skylark-utils/browser",
-  "skylark-utils/eventer",
-  "skylark-utils/noder",
-  "skylark-utils/geom",
-  "skylark-utils/velm",
-  "skylark-utils/query",
-  "./sbswt"
-],function(langx,browser,eventer,noder,geom,velm,$,sbswt){
+  "skylark-langx/langx",
+  "skylark-utils-dom/browser",
+  "skylark-utils-dom/eventer",
+  "skylark-utils-dom/noder",
+  "skylark-utils-dom/geom",
+  "skylark-utils-dom/query",
+  "./fuelux"
+],function(langx,browser,eventer,noder,geom,$,fuelux){
 
 	/*
 	 * Fuel UX Checkbox
@@ -18567,7 +18075,7 @@ define('skylark-fuelux/wizard',[
 
 	// WIZARD CONSTRUCTOR AND PROTOTYPE
 
-	var Wizard = sbswt.Wizard = sbswt.WidgetBase.inherit({
+	var Wizard = fuelux.Wizard = fuelux.WidgetBase.inherit({
 		klassName: "Wizard",
 
 		init : function(element,options) {
@@ -19007,7 +18515,7 @@ define('skylark-bs-swt/wizard',[
 });
 
 define('skylark-bs-swt/main',[
-    "skylark-utils/query",
+    "skylark-utils-dom/query",
     "./affix",
     "./alert",
     "./button",
